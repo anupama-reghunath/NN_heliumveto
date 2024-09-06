@@ -5,7 +5,15 @@ Framework for ML architectures for the SBT veto trained with pytorch.
 * neural network
 * message passing GNN
 
+## Usage
 
+### Inference
+
+Run example script apply_nn.py to apply trained neural network to nuDIS events.
+
+### Training 
+
+To be implemented 
 
 ## Installation:
 cpu: 
