@@ -20,7 +20,7 @@ model = NN(8004,3,[32,32,32,16,8], dropout=0)
 model.load_state_dict(torch.load('data/SBTveto_vacuum_multiclass_NN.pth', weights_only=True))
 model.eval()
 
-outputs, decisions = nn_output(model, x, XYZ, scaler_loaded, device = "cpu")
+outputs, decisions = nn_output(model, x, XYZ, scaler_loaded)
 
 print("The SBT decisions are ", decisions)
 

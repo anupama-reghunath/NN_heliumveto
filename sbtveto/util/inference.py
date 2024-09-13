@@ -2,7 +2,9 @@ import numpy as np
 import torch
 
 
-def nn_output(model, data, sbt_xyz, scalar, device="cuda"):
+def nn_output(model, data, sbt_xyz, scalar):
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
     X=np.hstack([ data  , np.repeat(sbt_xyz[:1,:],data.shape[0],0),
               np.repeat(sbt_xyz[1:2,:],data.shape[0],0),
