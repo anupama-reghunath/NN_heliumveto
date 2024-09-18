@@ -33,3 +33,22 @@ class NN(nn.Module):
             x = self._dropout(x)
         x = self._output_layer(x)
         return x
+
+    def load_model(self, path, device=None):
+        
+        """
+        Load the model state from a file and move it to the appropriate device.
+        
+        Args:
+            path (str): Path to the model file.
+            device (torch.device, optional): Device to load the model onto. If None, it will be set based on CUDA availability.
+            
+        Returns:
+            NN: The current model instance with loaded weights.
+        """
+        if device is None:
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.load_state_dict(torch.load(path, map_location=device, weights_only=True))
+        self.to(device)
+        self.eval()
+        return self

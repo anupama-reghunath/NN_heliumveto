@@ -12,9 +12,9 @@ def nn_output(model, data, sbt_xyz, scalar):
     X = scalar.transform(X)
     X = torch.tensor(X, dtype =torch.float32 ).to(device)
     output = model(X)
-    sbt_decision = (torch.max(output, dim = 1).indices == 0)
-    return output, sbt_decision
-
+    sbt_decision = (torch.max(output, dim = 1).indices != 0)#veto returns True if not signal(0)
+    classification=torch.max(output, dim = 1).indices
+    return output, sbt_decision,classification
 
 def gnn_output(model, data, sbt_xyz,  device="cuda"):
     return "Working on implementation"
