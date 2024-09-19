@@ -7,6 +7,7 @@ from sbtveto.blocks.aggregators import globals_to_edges
 
 
 
+
 class EdgeBlock(AbstractModule):
     def __init__(self, edge_model_fn,
                  use_edges=True,

@@ -44,6 +44,6 @@ class GlobalBlock(AbstractModule):
 
         updated_globals = self._global_model(collected_globals)
 
-        graph.update({'graph_globals': torch.squeeze(updated_globals, dim=0)})
+        graph.update({'graph_globals': updated_globals})
         #         print("global block ", graph.graph_globals.shape)
         return graph
