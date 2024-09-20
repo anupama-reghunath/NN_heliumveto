@@ -8,7 +8,16 @@ class NN(nn.Module):
     """
     Basic class for a customisable NN model in pytorch
     """
-    def __init__(self, input_dim = 8005, output_dim = 3, hidden_sizes = [128, 64, 32, 16, 8], dropout = 0.1):
+    def __init__(self, input_dim = 2003, output_dim = 3, hidden_sizes = [128, 64, 32, 16, 8], dropout = 0.0):
+        """
+        Constructor for NN class.
+
+        Args:
+            input_dim (int): input dimension
+            output_dim (int): output dimension
+            hidden_sizes (list): list of number of hidden units (int) of the hidden layers
+            dropout (float): dropout probability
+        """
         super(NN, self).__init__()
         self._layers = []
         self._batch_norms = []
@@ -27,7 +36,12 @@ class NN(nn.Module):
         self._output_layer = nn.Linear(hidden_sizes[-1], output_dim)
 
     def forward(self, x):
+        """
+        Forward pass function of the network.
 
+        Args:
+            x (torch.tensor): input to the network
+        """
         for i in range(len(self._layers)):
             x = self._batch_norms[i](torch.relu(self._layers[i](x)))
             x = self._dropout(x)

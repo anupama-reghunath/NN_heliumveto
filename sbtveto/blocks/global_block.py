@@ -23,8 +23,7 @@ class GlobalBlock(AbstractModule):
 
 
     def forward(self, graph, global_model_kwargs=None):
-        #         if global_model_kwargs is None:
-        #             global_model_kwargs = {}
+
 
         globals_to_collect = []
 
@@ -39,11 +38,11 @@ class GlobalBlock(AbstractModule):
 
 
         collected_globals = torch.cat(globals_to_collect, axis=-1)
-        # collected_globals = torch.unsqueeze(collected_globals, 0)
+
 
 
         updated_globals = self._global_model(collected_globals)
 
         graph.update({'graph_globals': updated_globals})
-        #         print("global block ", graph.graph_globals.shape)
+
         return graph

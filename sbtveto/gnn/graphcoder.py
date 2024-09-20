@@ -30,15 +30,11 @@ class GraphIndependent(AbstractModule):
             else:
                 self._global_model = WrappedModelFnModule(global_model)
 
-    #     def forward(self, graph, edge_model_kwargs=None, node_model_kwargs=None, global_model_kwargs=None):
     def forward(self, graph):
         graph.update(
             {'edges': self._edge_model(graph.edges),
              'nodes': self._node_model(graph.nodes),
              'graph_globals': self._global_model(graph.graph_globals)})  # CHECK!!!
 
-        #         graph_globals=self._global_model(graph.graph_globals)) #CHECK!!!
-        #         graph_globals=self._global_model(torch.reshape(graph.graph_globals, (graph.graph_globals.shape[0],1))))
 
-        #         torch.reshape(a, (a.shape[0],1))
         return graph

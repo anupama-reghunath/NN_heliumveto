@@ -14,7 +14,7 @@ import contextlib
 class GraphNetwork(AbstractModule):
 
     def __init__(self, edge_model, node_model, use_globals, global_model=None, hidden_size=8):
-        #                  edge_block_opt=None, node_block_opt=None, global_block_opt=None):
+
         super(GraphNetwork, self).__init__()
         self._use_globals = use_globals
         with self._enter_variable_scope():

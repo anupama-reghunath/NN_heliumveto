@@ -24,9 +24,7 @@ def _nested_concatenate(input_graphs, field_name, axis):
         raise ValueError(
             "All graphs or no graphs must contain {} features.".format(field_name))
 
-    # if field_name=="graph_globals":
-    #    return tree.map_structure(lambda *x: torch.cat(x, axis-1), *features_list)
-    # else:
+
     return tree.map_structure(lambda *x: torch.cat(x, axis), *features_list)
 
 
@@ -39,7 +37,7 @@ def graph_concat(input_graphs, axis):
     nodes = _nested_concatenate(input_graphs, "nodes", axis)
     edges = _nested_concatenate(input_graphs, "edges", axis)
     graph_globals = _nested_concatenate(input_graphs, "graph_globals", axis)
-    #     print(graph_globals)
+
     graph = input_graphs[0].clone()
     output = graph.update({'nodes': nodes, 'edges': edges, 'graph_globals': graph_globals})
     if axis != 0:
@@ -52,6 +50,9 @@ def graph_concat(input_graphs, axis):
 
 
 class MLPGraphNetwork(nn.Module):
+    """
+    message passing GNN with MLP update functions
+    """
     def __init__(self, edge_output_size, node_output_size, global_output_size):
         super(MLPGraphNetwork, self).__init__()
 
@@ -60,13 +61,14 @@ class MLPGraphNetwork(nn.Module):
                                      node_model=make_mlp(node_output_size),
                                      use_globals=True,
                                      global_model=make_mlp(node_output_size))
-        # global_model=make_mlp(global_output_size))
+
 
     def forward(self, inputs):
         return self._network(inputs)
 
 
 class MLPGraphIndependent(nn.Module):
+    """ GNN encoder using MLPs """
     def __init__(self, edge_output_size, node_output_size, global_output_size):
         super(MLPGraphIndependent, self).__init__()
 
@@ -79,6 +81,7 @@ class MLPGraphIndependent(nn.Module):
 
 
 class EncodeProcessDecode(nn.Module):
+    """ GNN model class """
     def __init__(self,
                  mlp_output_size,
                  edge_op=None,
@@ -113,14 +116,14 @@ class EncodeProcessDecode(nn.Module):
 
         self._output_transform = GraphIndependent(edge_fn, node_fn, global_fn)
 
-    #         self._encoder2 = GraphIndependent(mlp_output_size, mlp_output_size, mlp_output_size)
+
 
     def forward(self, input_op):
-        # print("input ", input_op.graph_globals.shape)
+
         latent = self._encoder(input_op)
         latent0 = latent.clone()
         for b, core in enumerate(self._blocks):
-            #print("latent ", latent.edgepos)
+
             latent = core(latent)
 
             if b < (len(self._blocks)-1):
