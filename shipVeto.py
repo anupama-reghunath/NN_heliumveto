@@ -96,12 +96,12 @@ class Task:
    self.inputmatrix = []
 
    # Load the necessary SBT-related data
-   XYZ = np.load("../SBT_XYZ.npy")  # Load SBT XYZ coordinates
+   #XYZ = np.load("../SBT_XYZ.npy")  # Load SBT XYZ coordinates
    scaler_loaded = joblib.load('data/robust_scaler.pkl')
 
    # Define the model architecture and load pretrained weights
-   model = NN(8004, 3, [32, 32, 32, 16, 8], dropout=0)
-   model.load_model('data/SBTveto_vacuum_multiclass_NN.pth')
+   model = NN(2003, 3, [32, 32, 32, 16, 8], dropout=0)
+   model.load_model('data/SBTveto_vacuum_multiclass_NN_SBT_E_signal_xyz.pth')
    model.eval()  # Set the model to evaluation mode
 
 
@@ -128,16 +128,16 @@ class Task:
                                         #time_array,
                                         vertexposition,
                                         #candidate_details,
-                                        np.array(nHits),
+                                        #np.array(nHits),
                                         #np.array(weight_i)
                                         )
                                         , axis=None
-                                        ) )# inputmatrix has shape (1,2004)
+                                        ) )# inputmatrix has shape (1,2003)
    
    # After all data is collected, convert the list to a NumPy array
    self.inputmatrix = np.array(self.inputmatrix, dtype=np.float32)
 
-   outputs, decisions,classification = nn_output(model, self.inputmatrix, XYZ, scaler_loaded)#returns True if to be vetoed
+   outputs, decisions,classification = nn_output(model, self.inputmatrix, scaler_loaded)#returns True if to be vetoed
    
    return decisions,classification #class 0 =Signal, class 1 = neuDIS, class 2 =muonDIS
 
