@@ -64,13 +64,14 @@ def Main_function():
 
                 NN_Veto_veto,classification             =   veto_ship.Veto_decision_NN() #candidate= also explicitly signal)
                 # need to test GNN now
-                # GNN_Veto_veto,GNN_classification             =   veto_ship.Veto_decision_GNN() #candidate= also explicitly signal)
+                GNN_Veto_veto, GNN_classification             =   veto_ship.Veto_decision_GNN() #candidate= also explicitly signal)
 
                 classification=classification.item()    # default format is a tensor
-                
+                GNN_classification = GNN_classification.item()
+
                 if NN_Veto_veto:    print("The event is not signal(0), must be :",classification_list[classification])
-                
-                    
-    
+                if GNN_Veto_veto:    print("GNN Veto - The event is not signal(0), must be :",
+                                           classification_list[GNN_classification])
+
 
 Main_function()

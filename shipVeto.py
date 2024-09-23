@@ -185,7 +185,7 @@ class Task:
      # After all data is collected, convert the list to a NumPy array
      self.inputmatrix = np.array(self.inputmatrix, dtype=np.float32)
 
-     outputs, decisions, classification = gnn_output(model, x, XYZ)
+     outputs, decisions, classification = gnn_output(model, self.inputmatrix, XYZ)
   # returns True if to be vetoed
 
      return decisions, classification  # class 0 =Signal, class 1 = neuDIS, class 2 =muonDIS
