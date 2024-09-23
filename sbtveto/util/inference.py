@@ -88,7 +88,7 @@ def gnn_output(model, x, sbt_xyz):
 
     # load model weights in here need to improve this
     model(graph.clone().detach())
-    if device = 'cpu':
+    if device == 'cpu':
         model.load_state_dict(torch.load('data/SBT_vacuum_multiclass_4block_GNN_noUBT.pt', weights_only=True,
                                          map_location=torch.device('cpu')))
     else:
