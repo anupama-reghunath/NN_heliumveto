@@ -69,7 +69,7 @@ def Main_function():
                 classification=classification.item()    # default format is a tensor
                 GNN_classification = GNN_classification.item()
 
-                if NN_Veto_veto:    print("The event is not signal(0), must be :",classification_list[classification])
+                if NN_Veto_veto:    print("NN Veto - The event is not signal(0), must be :",classification_list[classification])
                 if GNN_Veto_veto:    print("GNN Veto - The event is not signal(0), must be :",
                                            classification_list[GNN_classification])
 
