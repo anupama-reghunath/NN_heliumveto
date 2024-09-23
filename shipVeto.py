@@ -7,7 +7,8 @@ import joblib
 import torch
 from sbtveto.model.nn_model import NN
 from sbtveto.util.inference import nn_output
-
+from sbtveto.model.gnn_model import EncodeProcessDecode
+from sbtveto.util.inference import gnn_output
 class Task:
  "initialize and give response of the veto systems"
  def __init__(self,t):

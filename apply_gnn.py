@@ -8,10 +8,10 @@ import numpy as np
 
 
 
-XYZ =np.load("../SBT/SBT_XYZ.npy")
+XYZ =np.load("data/SBT_XYZ.npy")
 neu_files = glob.glob("../SBT/ml_dataset/*neuDIS*.root")
 file = uproot.open(neu_files[0])
-x = np.array(file['tree;1']['inputmatrix'].array())[:,:-1]
+x = np.array(file['tree;1']['inputmatrix'].array())[:,:-2]
 
 print("Input is 104 events of nuDIS")
 print("Input shape ", x.shape)
@@ -30,4 +30,4 @@ model = EncodeProcessDecode(mlp_output_size=8, global_op=3,num_blocks=4)
 
 outputs, decisions, classification = gnn_output(model, x, XYZ)
 
-print("The SBT decisions are ", decisions)
+print("The SBT decisions are ", outputs)

@@ -24,6 +24,7 @@ def adjacency(n_dau):
 
 def gnn_output(model, x, sbt_xyz):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     j = 0
     X = np.vstack([np.expand_dims(x[:, :2000], 0), np.expand_dims(np.repeat(sbt_xyz[:1, :], x.shape[0], 0), 0),
                    np.expand_dims(np.repeat(sbt_xyz[1:2, :], x.shape[0], 0), 0),
@@ -36,7 +37,7 @@ def gnn_output(model, x, sbt_xyz):
     X = np.swapaxes(X, 1, 2)
     XSBT = X[:, :, :4].copy()
 
-    X_UBT_sigvertex = X[:, 0, -4:].copy()[0]
+    X_UBT_sigvertex = X[:, 0, -3:].copy()[0]
     Xcon = XSBT[0][XSBT[0][:, 0] > 0]
     print(X_UBT_sigvertex.shape)
     print(Xcon.shape)
@@ -84,17 +85,17 @@ def gnn_output(model, x, sbt_xyz):
     graph['senders'] = graph.edge_index[0]
     graph['edgepos'] = graph['edgepos'] - torch.min(graph['edgepos'])
     graph.batch = torch.zeros(graph.nodes.shape[0], dtype=torch.int64)
-    graph.to(device)
-    model.to(device)
+
     # load model weights in here need to improve this
     model(graph.clone().detach())
     model.load_state_dict(torch.load('data/SBT_vacuum_multiclass_4block_GNN_noUBT.pt', weights_only=True))
     model.eval()
+    graph.to(device)
+    model.to(device)
     output_graph = model(graph)
-    print(output_graph.graph_globals)
-    print(torch.max(output_graph.graph_globals, dim = 1))
+
     sbt_decision = (torch.max(output_graph.graph_globals, dim = 1).indices != 0)#veto returns True if not signal(0)
-    print(sbt)
+
     classification = torch.max(output_graph.graph_globals, dim = 1).indices
     return output_graph.graph_globals, sbt_decision, classification
 

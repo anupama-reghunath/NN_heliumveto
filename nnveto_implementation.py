@@ -7,7 +7,7 @@ run the following commands outside of the FairShiP environment:
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
     pip install scikit-learn==1.4.0
     pip install torch_geometric
-    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu124.html
+    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
 then proceed with running the analysis script within FairShiP.
 Example script below:
     usage:
