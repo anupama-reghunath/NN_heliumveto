@@ -62,7 +62,9 @@ def Main_function():
                 BasicSBT90_veto ,wBasicSBT90,HitsSBT90  =   veto_ship.SBT_decision(threshold=90)
                 BasicSBT0_veto                          =   bool(len(sTree.Digi_SBTHits)) #any sbt activity
 
-                NN_Veto_veto,classification             =   veto_ship.Veto_decision_NN() #candidate= also explicitly signal) 
+                NN_Veto_veto,classification             =   veto_ship.Veto_decision_NN() #candidate= also explicitly signal)
+                # need to test GNN now
+                # GNN_Veto_veto,GNN_classification             =   veto_ship.Veto_decision_GNN() #candidate= also explicitly signal)
 
                 classification=classification.item()    # default format is a tensor
                 

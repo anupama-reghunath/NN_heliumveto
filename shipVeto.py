@@ -137,9 +137,58 @@ class Task:
    # After all data is collected, convert the list to a NumPy array
    self.inputmatrix = np.array(self.inputmatrix, dtype=np.float32)
 
-   outputs, decisions,classification = nn_output(model, self.inputmatrix, scaler_loaded)#returns True if to be vetoed
+   outputs, decisions, classification = nn_output(model, self.inputmatrix, scaler_loaded)#returns True if to be vetoed
    
    return decisions,classification #class 0 =Signal, class 1 = neuDIS, class 2 =muonDIS
+
+ def Veto_decision_GNN(self, mcParticle=None, detector='liquid', candidate=None):
+     self.inputmatrix = []
+
+     # Load the necessary SBT-related data
+     XYZ =np.load("data/SBT_XYZ.npy")
+
+     # Define the model architecture and load pretrained weights
+     model = EncodeProcessDecode(mlp_output_size=8, global_op=3,num_blocks=4)
+
+
+
+     detList = self.SBTcell_map()
+     energy_array = np.zeros(2000)
+     # time_array = np.full(2000, -9999) #default value is -9999
+
+     for aDigi in self.sTree.Digi_SBTHits:
+         detID = str(aDigi.GetDetectorID())
+         ID_index = [lastname for lastname, firstname in detList.items() if firstname == detID][0]
+         energy_array[ID_index] = aDigi.GetEloss()
+         # time_array[ID_index] = aDigi.GetTDC()
+
+     nHits = len(self.sTree.UpstreamTaggerPoint)
+
+     if candidate == None: candidate = self.sTree.Particles[0]
+
+     candidatePos = ROOT.TLorentzVector()
+     candidate.ProductionVertex(candidatePos)
+     vertexposition = np.array([candidatePos.X(), candidatePos.Y(), candidatePos.Z()])
+
+     self.inputmatrix.append(np.concatenate(
+         (energy_array,
+          # time_array,
+          vertexposition,
+          # candidate_details,
+          # np.array(nHits),
+          # np.array(weight_i)
+          )
+         , axis=None
+     ))  # inputmatrix has shape (1,2003)
+
+     # After all data is collected, convert the list to a NumPy array
+     self.inputmatrix = np.array(self.inputmatrix, dtype=np.float32)
+
+     outputs, decisions, classification = gnn_output(model, x, XYZ)
+  # returns True if to be vetoed
+
+     return decisions, classification  # class 0 =Signal, class 1 = neuDIS, class 2 =muonDIS
+
 
  def SVT_decision(self,mcParticle=None):
   nHits = 0
