@@ -58,8 +58,8 @@ def gnn_output(model, x, sbt_xyz):
         assign_index = knn(Xcon2, Xcon2, k)
         assign_index = assign_index
         assign_index = assign_index[:, assign_index[0] != assign_index[1]]
-        edge_index = assign_index
-
+        tensor_edge_index = assign_index
+    edge_index = tensor_edge_index.numpy()
     if edge_index.shape[1] == 0:
         print(edge_index.shape)
 
@@ -78,7 +78,7 @@ def gnn_output(model, x, sbt_xyz):
     global_features = torch.tensor(global_features, dtype=torch.float).unsqueeze(0)
     edgepos = torch.tensor([j] * edge_index[0].shape[0], dtype=torch.int64)
     Xcon = torch.tensor(Xcon, dtype=torch.float)
-    graph = Data(nodes=Xcon, edge_index=edge_index, edges=edge_features, graph_globals=global_features,
+    graph = Data(nodes=Xcon, edge_index=tensor_edge_index, edges=edge_features, graph_globals=global_features,
                  edgepos=edgepos)
     #graph
     graph['receivers'] = graph.edge_index[1]
