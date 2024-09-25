@@ -51,7 +51,7 @@ def gnn_output(model, x, sbt_xyz):
     # if less than 22 SBT cells use a full connected graph
     if Xcon.shape[0] < 22:
         A = adjacency(Xcon.shape[0] - 1)
-        edge_index = torch.tensor(A, dtype=torch.float).nonzero().t().contiguous()
+        tensor_edge_index = torch.tensor(A, dtype=torch.float).nonzero().t().contiguous()
     else:
         k = 5
         # perform k nearest neighbours clustering
