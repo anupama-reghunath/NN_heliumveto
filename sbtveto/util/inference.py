@@ -2,6 +2,9 @@ import numpy as np
 import torch
 from torch_geometric.nn import knn
 from torch_geometric.data import Data
+from sbtveto.model.nn_model import NN
+import joblib
+
 
 def nn_output(model, data, scalar):
     
@@ -44,8 +47,12 @@ def gnn_output(model, x, sbt_xyz):
 
     Xcon = np.hstack([Xcon, np.expand_dims(np.arctan(Xcon[:, 2] / Xcon[:, 1]), 1)])
     if Xcon.shape[0] < 1:
-        print("Less than one SBT cell gnn veto not possible. Therefore, selecting signal.")
-        return None, torch.tensor([False]), torch.tensor([0])
+        print("Less than one SBT cell gnn veto not possible. Therefore, using nn.")
+        scaler_loaded = joblib.load('data/robust_scaler.pkl')
+        nn = NN(2003, 3, [32, 32, 32, 16, 8], dropout=0)
+        nn.load_model('data/SBTveto_vacuum_multiclass_NN_SBT_E_signal_xyz.pth')
+        nn.eval()  # Set the model to evaluation mode
+        return nn_output(nn, x, scaler_loaded)
 
 
     Xcon2 = torch.tensor(Xcon, dtype=torch.float)
