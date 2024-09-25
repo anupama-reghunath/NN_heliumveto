@@ -7,11 +7,11 @@ run the following commands outside of the FairShiP environment:
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
     pip install scikit-learn==1.4.0
     pip install torch_geometric
-    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f
 then proceed with running the analysis script within FairShiP.
 Example script below:
     usage:
-        python nnveto_implementation.py 
+     https://data.pyg.org/whl/torch-2.4.0+cpu.html   python nnveto_implementation.py
 
 """
 #-----------------------------------------------------------------------------------------------------------
@@ -69,9 +69,13 @@ def Main_function():
                 classification=classification.item()    # default format is a tensor
                 GNN_classification = GNN_classification.item()
 
-                if NN_Veto_veto:    print("NN Veto - The event is not signal(0), must be :",classification_list[classification])
-                if GNN_Veto_veto:    print("GNN Veto - The event is not signal(0), must be :",
+                if NN_Veto_veto.item():    print("NN Veto - The event is not signal(0), must be :",classification_list[classification])
+                else:
+                    print("NN Veto - Signal found")
+                if GNN_Veto_veto.item():    print("GNN Veto - The event is not signal(0), must be :",
                                            classification_list[GNN_classification])
+                else:
+                    print("GNN Veto - Signal found")
 
 
 Main_function()

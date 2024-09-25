@@ -44,8 +44,9 @@ def gnn_output(model, x, sbt_xyz):
 
     Xcon = np.hstack([Xcon, np.expand_dims(np.arctan(Xcon[:, 2] / Xcon[:, 1]), 1)])
     if Xcon.shape[0] < 1:
-        print("dimension of SBT shells not large enough ")
-        return None
+        print("Less than one SBT cell gnn veto not possible. Therefore, selecting signal.")
+        return None, torch.tensor([False]), torch.tensor([0])
+
 
     Xcon2 = torch.tensor(Xcon, dtype=torch.float)
     # if less than 22 SBT cells use a full connected graph
@@ -63,11 +64,8 @@ def gnn_output(model, x, sbt_xyz):
     if edge_index.shape[1] == 0:
         print(edge_index.shape)
 
-    if Xcon.shape[0] == 1:
-        r = torch.tensor(np.sqrt(np.sum((Xcon[edge_index[0], 1:4] - Xcon[edge_index[1], 1:4]) ** 2, 0)),
-                         dtype=torch.float)
-    else:
-        r = torch.tensor(np.sqrt(np.sum((Xcon[edge_index[0], 1:4] - Xcon[edge_index[1], 1:4]) ** 2, 1)),
+
+    r = torch.tensor(np.sqrt(np.sum((Xcon[edge_index[0], 1:4] - Xcon[edge_index[1], 1:4]) ** 2, 1)),
                          dtype=torch.float)
     delta_z = torch.tensor(Xcon[edge_index[0], 3] - Xcon[edge_index[1], 3], dtype=torch.float)
     delta_phi = torch.tensor(np.arctan(Xcon[edge_index[0], 2] / Xcon[edge_index[0], 1]) - np.arctan(
