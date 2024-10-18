@@ -20,6 +20,39 @@ class Task:
   self.detList  = self.detMap()
   self.sTree = t
 
+ def define_t_vtx(self,candidate):
+      self.t0=self.sTree.ShipEventHeader.GetEventTime()
+      self.candidatePos = ROOT.TLorentzVector()
+      candidate.ProductionVertex(self.candidatePos)
+
+      d1, d2 = candidate.GetDaughter(0), candidate.GetDaughter(1)        
+      d1_mc, d2_mc = self.sTree.fitTrack2MC[d1], self.sTree.fitTrack2MC[d2]                   
+
+      time_vtx_from_strawhits=[]        
+
+      for hit in self.sTree.strawtubesPoint:            
+
+         if not (int( str( hit.GetDetectorID() )[:1]) ==1 or int( str( hit.GetDetectorID() )[:1]) ==2) : continue #if hit.GetZ() > ( ShipGeo.TrackStation2.z + 0.5*(ShipGeo.TrackStation3.z - ShipGeo.TrackStation2.z) ): continue #starwhits only from T1 and T2 before the SHiP magnet .
+
+         if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
+           
+         t_straw    = hit.GetTime()
+         d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
+
+         dist     = np.sqrt( (self.candidatePos.X()-hit.GetX() )**2+( self.candidatePos.Y() -hit.GetY())**2+ ( self.candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm            
+
+         Mom          = self.sTree.MCTrack[hit.GetTrackID()].GetP()/u.GeV
+         mass         = self.sTree.MCTrack[hit.GetTrackID()].GetMass()
+         v            = u.c_light*Mom/np.sqrt(Mom**2+(mass)**2)
+
+         t_vertex   = t_straw-(dist/v)
+
+         time_vtx_from_strawhits.append(t_vertex)
+          
+      t_vtx=np.average(time_vtx_from_strawhits)+self.t0   
+
+      return t_vtx  
+
  def detMap(self):
   fGeo = ROOT.gGeoManager
   detList = {}
@@ -45,7 +78,7 @@ class Task:
  def SBT_liquid_decision(self,mcParticle=None):
     SBT_decision(self,mcParticle,detector='liquid')
 
- def SBT_decision(self,mcParticle=None,detector='liquid',threshold=45,advSBT=None,candidate=None):
+ def SBT_decision(self,mcParticle=None,detector='liquid',threshold=45,candidate=None):
   # if mcParticle >0, only count hits with this particle
   # if mcParticle <0, do not count hits with this particle
   ################################
@@ -78,14 +111,9 @@ class Task:
         if found: continue
      position = aDigi.GetXYZ()
      ELoss    = aDigi.GetEloss()
-     if advSBT:
-         if candidate==None:candidate=self.sTree.Particles[0]
-         self.t_vtx =self.define_t_vtx(candidate)  
-         if ELoss>=threshold*0.001 and self.advSBT_Veto_criteria_check(aDigi,threshold_val=threshold): hitSegments.append(index)#hitSegments+= 1   #does the SBT cell pass the 3 criteria:     
-
-     else:
-         if ELoss>=threshold*0.001: hitSegments.append(index)#hitSegments += 1 
-         #if aDigi.isValid(): hitSegments += 1 #threshold of 45 MeV per segment
+   
+     if ELoss>=threshold*0.001: hitSegments.append(index)#hitSegments += 1 
+     #if aDigi.isValid(): hitSegments += 1 #threshold of 45 MeV per segment
   
   w = (1-self.SBTefficiency)**len(hitSegments)  
   veto = self.random.Rndm() > w
@@ -151,8 +179,6 @@ class Task:
      # Define the model architecture and load pretrained weights
      model = EncodeProcessDecode(mlp_output_size=8, global_op=3,num_blocks=4)
 
-
-
      detList = self.SBTcell_map()
      energy_array = np.zeros(2000)
      # time_array = np.full(2000, -9999) #default value is -9999
@@ -186,7 +212,7 @@ class Task:
      self.inputmatrix = np.array(self.inputmatrix, dtype=np.float32)
 
      outputs, decisions, classification = gnn_output(model, self.inputmatrix, XYZ)
-  # returns True if to be vetoed
+     # returns True if to be vetoed
 
      return decisions, classification  # class 0 =Signal, class 1 = neuDIS, class 2 =muonDIS
 
