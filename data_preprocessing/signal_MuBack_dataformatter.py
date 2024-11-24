@@ -152,7 +152,42 @@ class EventDataProcessor:
         print(f"\n\nFiles formatted and saved in {rootfilename}")
         self.global_file_index += 1
         self.inputmatrix = []
+    
+    def define_t_vtx(self,sTree,candidate):
+          
+          t0=sTree.ShipEventHeader.GetEventTime()
+          
+          candidatePos = ROOT.TLorentzVector()
+          candidate.ProductionVertex(candidatePos)
 
+          d1, d2 = candidate.GetDaughter(0), candidate.GetDaughter(1)        
+          d1_mc, d2_mc = sTree.fitTrack2MC[d1], sTree.fitTrack2MC[d2]                   
+
+          time_vtx_from_strawhits=[]        
+
+          for hit in sTree.strawtubesPoint:            
+
+             if not (int( str( hit.GetDetectorID() )[:1]) ==1 or int( str( hit.GetDetectorID() )[:1]) ==2) : continue #if hit.GetZ() > ( ShipGeo.TrackStation2.z + 0.5*(ShipGeo.TrackStation3.z - ShipGeo.TrackStation2.z) ): continue #starwhits only from T1 and T2 before the SHiP magnet .
+
+             if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
+               
+             t_straw    = hit.GetTime()
+             d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
+
+             dist     = np.sqrt( (candidatePos.X()-hit.GetX() )**2+( candidatePos.Y() -hit.GetY())**2+ ( candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm            
+
+             Mom          = sTree.MCTrack[hit.GetTrackID()].GetP()/u.GeV
+             mass         = sTree.MCTrack[hit.GetTrackID()].GetMass()
+             v            = u.c_light*Mom/np.sqrt(Mom**2+(mass)**2)
+
+             t_vertex   = t_straw-(dist/v)
+
+             time_vtx_from_strawhits.append(t_vertex)
+              
+          t_vtx=np.average(time_vtx_from_strawhits)+t0   
+
+          return t_vtx  
+    
     def process_event(self, signal_event,embg_event,Digi_SBTHits):
 
         detList = self.SBTcell_map()
@@ -208,11 +243,13 @@ class EventDataProcessor:
             
             vertexposition = np.array([signalPos.X(), signalPos.Y(), signalPos.Z()])
             
+            t_vtx=self.define_t_vtx(signal_event,signal)
+
             self.inputmatrix.append(np.concatenate(
                                                    (energy_array,
                                                     time_array,
                                                     vertexposition,
-                                                    #np.array(nHits),
+                                                    np.array(t_vtx),#np.array(nHits),
                                                     np.array(weight_i)
                                                     ,candidate_details
                                                     )
@@ -343,10 +380,10 @@ class EventDataProcessor:
         print("Number of SBThits:", np.count_nonzero(inputmatrix[0][:854]),"/",len(inputmatrix[0][:854]))
         print("\tshould match timing entries:",np.sum(inputmatrix[0][854:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
         print("\nvertexposition",inputmatrix[0][1708:1711])
-        #print("\nUBT hits:",inputmatrix[0][1711])
-        print("\nEvent weight:",inputmatrix[0][1711]," over 5 years")
+        print("\nVertex time:",inputmatrix[0][1711],"ns")
+        print("\nEvent weight:",inputmatrix[0][1712]," over 5 years")
         
-        signal_details=inputmatrix[0][1712:]
+        signal_details=inputmatrix[0][1713:]
         print("\nOther Candidate details:")
         print(f"\tlen(sTree.Particles)\t{signal_details[0]}")
         print(f"\tsignal.GetMass()\t{signal_details[1]}")
