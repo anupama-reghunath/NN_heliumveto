@@ -10,7 +10,7 @@ import os
 from argparse import ArgumentParser
 
 parser = ArgumentParser(description=__doc__);
-parser.add_argument("-i", "--jobDir",   dest="jobDir",      help="job name of input file",  default='job_24_27',  type=str)
+parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_0',  type=str)
 parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed neuDIS simulation folder")
 options = parser.parse_args()
 
@@ -20,12 +20,11 @@ class EventDataProcessor:
         self.geo_file = geo_file
         self.output_dir = output_dir
         self.global_file_index = 0
-        self.global_event_id = 0
+        self.global_candidate_id = 0
         self.inputmatrix = []
         self.truth = []
         self.detList = None  # Placeholder for cached SBT cell map
 
-        # Load the geometry file
         self.load_geofile()
     
     def load_geofile(self):
@@ -33,9 +32,9 @@ class EventDataProcessor:
         Load the geometry file and set the global geometry manager.
         """
         try:
-            fgeo = ROOT.TFile(self.geo_file)  # Open the geofile
-            self.fGeo = fgeo.FAIRGeom  # Set the FAIR geometry manager
-            ROOT.gGeoManager = self.fGeo  # Make sure the global gGeoManager is set
+            fgeo = ROOT.TFile(self.geo_file)  
+            self.fGeo = fgeo.FAIRGeom  
+            ROOT.gGeoManager = self.fGeo  
 
             upkl    = Unpickler(fgeo)
             self.ShipGeo = upkl.load('ShipGeo')
@@ -122,16 +121,10 @@ class EventDataProcessor:
             energy_array[ID_index] = aDigi.GetEloss()
             time_array[ID_index] = aDigi.GetTDC()
 
-        nHits=len(sTree.UpstreamTaggerPoint)
+        #nHits=len(sTree.UpstreamTaggerPoint)
 
         for signal in sTree.Particles:
             
-            self.neuDIS_count['SBT+noSBT'].append(weight_i)
-        
-            if len(sTree.Digi_SBTHits):     self.neuDIS_count['withSBTactivity'].append(weight_i)
-            else:                           self.neuDIS_count[  'noSBTactivity'].append(weight_i)
-    
-            self.count+=1
             signalPos = ROOT.TLorentzVector()
             signal.ProductionVertex(signalPos)
             
@@ -170,33 +163,31 @@ class EventDataProcessor:
                                                    (energy_array,
                                                     time_array,
                                                     vertexposition,
-                                                    np.array(nHits),
+                                                    #np.array(nHits),
                                                     np.array(weight_i)
                                                     ,candidate_details
                                                     )
                                                     , axis=None
                                                     ) )# inputmatrix has shape (nEvents,size of inputarray)
 
+
             self.truth.append(1)
+            self.global_candidate_id += 1
 
     def process_file(self):
-
-        self.neuDIS_count =  {'noSBTactivity':[],'withSBTactivity':[], 'SBT+noSBT':[]}
 
         f = ROOT.TFile.Open(self.input_file)
         filenumber = self.input_file.split("job")[1][1:-36]
         sTree = f.cbmsim
         nEvents = sTree.GetEntries()
-        self.count=0
-        for eventNr in range(nEvents):
+        
+        for eventNr,event in enumerate(sTree):
             
-            rc = sTree.GetEvent(eventNr)
-            if hasattr(sTree, 'Particles') and len(sTree.Particles):
-                print(f"{self.count}  neuDIS {filenumber} {eventNr} {self.global_event_id} ---> {len(sTree.Particles)} reconst. particle(s) in event")
-                self.process_event(sTree, eventNr)
-            self.global_event_id += 1
-            #print(self.global_event_id)
-        for keys in self.neuDIS_count: print("\t",keys,"\t=\t",len(self.neuDIS_count[keys]))
+            if hasattr(event, 'Particles') and len(event.Particles) and len(event.Digi_SBTHits):
+                print(f"neuDIS {filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
+                self.process_event(event, eventNr)
+                
+            
         self.make_outputfile(filenumber)
 
     def read_outputdata(self):
@@ -218,15 +209,15 @@ class EventDataProcessor:
 
         inputmatrix = np.concatenate(inputmatrixlist)
         truth = np.concatenate(truthlist)
-
-        print(f"Test print event 0:{len(inputmatrix[0])}\n------------------------------------------")
-        print("Number of SBThits:", np.count_nonzero(inputmatrix[0][:855]),"/",len(inputmatrix[0][:854]))
-        print("\tshould match timing entries:",np.sum(inputmatrix[0][855:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
+        print(f"\n\nNumber of events available:{len(inputmatrix)} ")
+        print(f"\nTest print event 0:\n------------------------------------------")
+        print("Number of SBThits:", np.count_nonzero(inputmatrix[0][:854]),"/",len(inputmatrix[0][:854]))
+        print("\tshould match timing entries:",np.sum(inputmatrix[0][854:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
         print("\nvertexposition",inputmatrix[0][1708:1711])
-        print("\nUBT hits:",inputmatrix[0][1711])
-        print("\nEvent weight:",inputmatrix[0][1712])
+        #print("\nUBT hits:",inputmatrix[0][1711])
+        print("\nEvent weight:",inputmatrix[0][1711]," over 5 years")
         
-        signal_details=inputmatrix[0][1713:]
+        signal_details=inputmatrix[0][1712:]
         print("\nOther Candidate details:")
         print(f"\tlen(sTree.Particles)\t{signal_details[0]}")
         print(f"\tsignal.GetMass()\t{signal_details[1]}")
@@ -248,5 +239,5 @@ else:
 
 processor = EventDataProcessor(input_file=path+options.jobDir+"/ship.conical.Genie-TGeant4_rec.root" , geo_file=path+options.jobDir+"/geofile_full.conical.Genie-TGeant4.root", output_dir="./")
 processor.process_file()
-#processor.read_outputdata()
+processor.read_outputdata()
 
