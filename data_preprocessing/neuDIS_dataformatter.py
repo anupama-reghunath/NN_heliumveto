@@ -77,7 +77,9 @@ class EventDataProcessor:
 
              if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
                
-             t_straw    = hit.GetTime()
+             #t_straw    = hit.GetTime()
+             t_straw    = sTree.MCTrack[0].GetStartT()/1e4+(hit.GetTime()-sTree.MCTrack[0].GetStartT()) #resolving bug. to be changed for new productions
+             
              d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
 
              dist     = np.sqrt( (candidatePos.X()-hit.GetX() )**2+( candidatePos.Y() -hit.GetY())**2+ ( candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm            
@@ -150,12 +152,16 @@ class EventDataProcessor:
         rho_L    =  sTree.MCTrack[0].GetWeight()
         weight_i =  self.define_weight(rho_L,SHiP_running=5)
         
+        t0=sTree.ShipEventHeader.GetEventTime()
 
         for aDigi in sTree.Digi_SBTHits:
             detID = str(aDigi.GetDetectorID())
             ID_index = [lastname for lastname, firstname in detList.items() if firstname == detID][0]
             energy_array[ID_index] = aDigi.GetEloss()
-            time_array[ID_index] = aDigi.GetTDC()
+            #time_array[ID_index] = aDigi.GetTDC()
+            correctedTDC=sTree.MCTrack[0].GetStartT()/1e4+(aDigi.GetTDC()-t0-sTree.MCTrack[0].GetStartT()) +t0 #to be changed for new productions after 25.11.2024, resolving existing bug
+            time_array[ID_index] = correctedTDC
+
 
         #nHits=len(sTree.UpstreamTaggerPoint)
 
