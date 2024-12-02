@@ -13,6 +13,8 @@ from argparse import ArgumentParser
 import shipunit as u
 pdg = ROOT.TDatabasePDG.Instance()
 import random
+import h5py
+
 
 parser = ArgumentParser();
 parser = ArgumentParser(description=__doc__);
@@ -141,15 +143,23 @@ class EventDataProcessor:
         inputmatrix = np.array(self.inputmatrix)
         truth       = np.array(self.truth)
         
-        rootfilename    = f"{self.output_dir}datafile_EMBG_{filenumber}_{self.global_file_index}.root"
+        rootfilename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.root"
 
         file = uproot.recreate(rootfilename)
         file["tree"] = {
-                        "inputmatrix": inputmatrix,
-                        "truth": truth
-                        }
+                    "inputmatrix": inputmatrix,
+                    "truth": truth
+                    }
 
         print(f"\n\nFiles formatted and saved in {rootfilename}")
+        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.h5"
+        with h5py.File(h5filename, 'w') as h5file:
+            for i in range(inputmatrix.shape[0]):
+                event_name = f"event_{i}"
+                event_group = h5file.create_group(event_name)
+                event_group.create_dataset('data', data=inputmatrix[i])
+                event_group.create_dataset('truth', data=truth[i])
+        print(f"\n\nFiles formatted and saved in {h5filename}")
         self.global_file_index += 1
         self.inputmatrix = []
     
