@@ -8,6 +8,7 @@ from rootpyPickler import Unpickler
 import os
 import shipunit as u
 from argparse import ArgumentParser
+import h5py
 
 parser = ArgumentParser(description=__doc__);
 parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_0',  type=str)
@@ -135,11 +136,19 @@ class EventDataProcessor:
 
         file = uproot.recreate(rootfilename)
         file["tree"] = {
-                        "inputmatrix": inputmatrix,
-                        "truth": truth
-                        }
+                    "inputmatrix": inputmatrix,
+                    "truth": truth
+                    }
 
         print(f"\n\nFiles formatted and saved in {rootfilename}")
+        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.h5"
+        with h5py.File(h5filename, 'w') as h5file:
+            for i in range(inputmatrix.shape[0]):
+                event_name = f"event_{i}"
+                event_group = h5file.create_group(event_name)
+                event_group.create_dataset('data', data=inputmatrix[i])
+                event_group.create_dataset('truth', data=truth[i])
+        print(f"\n\nFiles formatted and saved in {h5filename}")
         self.global_file_index += 1
         self.inputmatrix = []
 
@@ -241,6 +250,8 @@ class EventDataProcessor:
         for datafile in os.listdir(self.output_dir):
 
             if not datafile.startswith("datafile_neuDIS_"+options.jobDir.split('_', 1)[1]): continue
+
+            if not 'root' in datafile: continue
                         
             tree = uproot.open(self.output_dir+datafile)["tree"]
             data = tree.arrays(['inputmatrix', 'truth'], library='np')
@@ -283,5 +294,6 @@ else:
 
 processor = EventDataProcessor(input_file=path+options.jobDir+"/ship.conical.Genie-TGeant4_rec.root" , geo_file=path+options.jobDir+"/geofile_full.conical.Genie-TGeant4.root", output_dir="./")
 processor.process_file()
+
 processor.read_outputdata()
 
