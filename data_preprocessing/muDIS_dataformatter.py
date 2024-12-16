@@ -8,9 +8,10 @@ from rootpyPickler import Unpickler
 import os
 import shipunit as u
 from argparse import ArgumentParser
+import h5py
 
 parser = ArgumentParser(description=__doc__);
-parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_0',  type=str)
+parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='SBT/job_0',  type=str)
 parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed muDIS simulation folder")
 options = parser.parse_args()
 
@@ -19,7 +20,6 @@ class EventDataProcessor:
         self.input_file = input_file
         self.geo_file = geo_file
         self.output_dir = output_dir
-        self.global_file_index = 0
         self.global_candidate_id = 0
         self.inputmatrix = []
         self.truth = []
@@ -137,21 +137,28 @@ class EventDataProcessor:
         
         return weight_i    
 
-    def make_outputfile(self, filenumber):
+    def make_outputfile(self):
 
         inputmatrix = np.array(self.inputmatrix)
         truth       = np.array(self.truth)
         
-        rootfilename    = f"{self.output_dir}datafile_muDIS_{filenumber}_{self.global_file_index}.root"
+        rootfilename    = f"{self.output_dir}datafile_muDIS_{tag}_{self.filenumber}.root"
 
-        file = uproot.recreate(rootfilename)
-        file["tree"] = {
-                        "inputmatrix": inputmatrix,
-                        "truth": truth
-                        }
-
+        with uproot.recreate(rootfilename) as file:
+            file["tree"] = {
+                "inputmatrix": inputmatrix,
+                "truth": truth
+            }
         print(f"\n\nFiles formatted and saved in {rootfilename}")
-        self.global_file_index += 1
+
+        h5filename    = f"{self.output_dir}datafile_muDIS_{tag}_{self.filenumber}.h5"
+        with h5py.File(h5filename, 'w') as h5file:
+            for i in range(inputmatrix.shape[0]):
+                event_name = f"event_{i}"
+                event_group = h5file.create_group(event_name)
+                event_group.create_dataset('data', data=inputmatrix[i])
+                event_group.create_dataset('truth', data=truth[i])
+        print(f"\n\nFiles formatted and saved in {h5filename}")
         self.inputmatrix = []
 
     def process_event(self, sTree, eventNr):
@@ -231,18 +238,30 @@ class EventDataProcessor:
     def process_file(self):
 
         f = ROOT.TFile.Open(self.input_file)
-        filenumber = options.jobDir.split('_', 1)[1]
+        self.filenumber = options.jobDir.split('_', 1)[1]
         sTree = f.cbmsim
         nEvents = sTree.GetEntries()
+        Pz=0
+        counter=-1
         
         for eventNr,event in enumerate(sTree):
+            if not Pz==event.MCTrack[0].GetPz():
+                Pz=event.MCTrack[0].GetPz()
+                counter+=1
+                DIScount=-1
+            
+            DIScount+=1
+
+            print(eventNr,"MuonID",counter,"DIS-Id",DIScount,event.MCTrack[0].GetWeight(),event.MCTrack[0].GetPx(),event.MCTrack[0].GetPy(),Pz)
             
             if hasattr(event, 'Particles') and len(event.Particles) and len(event.Digi_SBTHits):
-                print(f"muDIS {filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
+                print(f"muDIS {self.filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
                 self.process_event(event, eventNr)
-                
+        
+        print(f"Total number of entries in the file: {nEvents}")    
+        print(f"Total number of candidates in the file: {self.global_candidate_id}")    
             
-        self.make_outputfile(filenumber)
+        self.make_outputfile()
 
     def read_outputdata(self):
 
@@ -250,8 +269,8 @@ class EventDataProcessor:
             
         for datafile in os.listdir(self.output_dir):
 
-            if not datafile.startswith("datafile_muDIS_"+options.jobDir.split('_', 1)[1]): continue
-                        
+            if not datafile.startswith(f"datafile_muDIS_{tag}_{self.filenumber}"):continue
+            if not datafile.endswith(".root"):continue                        
             tree = uproot.open(self.output_dir+datafile)["tree"]
             data = tree.arrays(['inputmatrix', 'truth'], library='np')
             
@@ -289,9 +308,14 @@ class EventDataProcessor:
 if options.path:
     path = options.path
 else:
-    path ='/eos/experiment/ship/user/anupamar/muonDIS_test/SBT/'
+    path = '/eos/experiment/ship/simulation/bkg/MuonDIS/'#'/eos/experiment/ship/user/anupamar/muonDIS_test/'#
 
-processor = EventDataProcessor(input_file=path+options.jobDir+"/ship.conical.muonDIS-TGeant4_rec.root" , geo_file=path+options.jobDir+"/geofile_full.conical.muonDIS-TGeant4.root", output_dir="./")
+#if 'SBT' in options.jobDir:
+tag=options.jobDir.split('/')[0]
+options.jobDir=options.jobDir.split('/')[-1]
+print(options.jobDir)
+
+processor = EventDataProcessor(input_file=path+tag+'/'+options.jobDir+"/ship.conical.muonDIS-TGeant4_rec.root" , geo_file=path+tag+'/'+options.jobDir+"/geofile_full.conical.muonDIS-TGeant4.root", output_dir="./")
 processor.process_file()
 processor.read_outputdata()
 
