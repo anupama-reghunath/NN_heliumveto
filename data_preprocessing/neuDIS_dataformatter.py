@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 import h5py
 
 parser = ArgumentParser(description=__doc__);
-parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_0',  type=str)
+parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_2',  type=str)
 parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed neuDIS simulation folder")
 options = parser.parse_args()
 
@@ -20,7 +20,6 @@ class EventDataProcessor:
         self.input_file = input_file
         self.geo_file = geo_file
         self.output_dir = output_dir
-        self.global_file_index = 0
         self.global_candidate_id = 0
         self.inputmatrix = []
         self.truth = []
@@ -108,7 +107,7 @@ class EventDataProcessor:
       dist = ROOT.TMath.Sqrt(dist)
       return dist #in cm
     
-    def define_weight(self,w_DIS,SHiP_running=5,N_gen=10000*20): #Each file has 10k events each, with 20 folders, change N_gen (#Number of generated interactions) according to files used
+    def define_weight(self,w_DIS,SHiP_running=5,N_gen=1*100000): #Each file has 100k events each change N_gen according to files(1) used for analysis.
         
         nPOTinteraction     =(2.e+20)*(SHiP_running/5)
         nPOTinteraction_perspill =5.e+13
@@ -132,7 +131,7 @@ class EventDataProcessor:
         inputmatrix = np.array(self.inputmatrix)
         truth       = np.array(self.truth)
         
-        rootfilename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.root"
+        rootfilename    = f"{self.output_dir}datafile_neuDIS_{filenumber}.root"
 
         file = uproot.recreate(rootfilename)
         file["tree"] = {
@@ -141,7 +140,7 @@ class EventDataProcessor:
                     }
 
         print(f"\n\nFiles formatted and saved in {rootfilename}")
-        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.h5"
+        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}.h5"
         with h5py.File(h5filename, 'w') as h5file:
             for i in range(inputmatrix.shape[0]):
                 event_name = f"event_{i}"
@@ -149,7 +148,6 @@ class EventDataProcessor:
                 event_group.create_dataset('data', data=inputmatrix[i])
                 event_group.create_dataset('truth', data=truth[i])
         print(f"\n\nFiles formatted and saved in {h5filename}")
-        self.global_file_index += 1
         self.inputmatrix = []
 
     def process_event(self, sTree, eventNr):
@@ -234,6 +232,8 @@ class EventDataProcessor:
         sTree = f.cbmsim
         nEvents = sTree.GetEntries()
         
+        print(nEvents)
+
         for eventNr,event in enumerate(sTree):
             
             if hasattr(event, 'Particles') and len(event.Particles) and len(event.Digi_SBTHits):
@@ -290,7 +290,7 @@ class EventDataProcessor:
 if options.path:
     path = options.path
 else:
-    path ='/eos/experiment/ship/user/Iaroslava/train_sample_N2024/'
+    path = '/eos/experiment/ship/user/Iaroslava/train_sample_N2024_big/'#'/eos/experiment/ship/user/Iaroslava/train_sample_N2024/'<---older smaller sample.
 
 processor = EventDataProcessor(input_file=path+options.jobDir+"/ship.conical.Genie-TGeant4_rec.root" , geo_file=path+options.jobDir+"/geofile_full.conical.Genie-TGeant4.root", output_dir="./")
 processor.process_file()
