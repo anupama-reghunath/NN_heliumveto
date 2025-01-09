@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Script to format neuDIS data file for NN studies."""
+"""Script to format muuDIS data file for NN studies."""
 
 import ROOT
 import uproot
@@ -11,8 +11,8 @@ from argparse import ArgumentParser
 import h5py
 
 parser = ArgumentParser(description=__doc__);
-parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_2',  type=str)
-parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed neuDIS simulation folder")
+parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='SBT/job_0',  type=str)
+parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed muDIS simulation folder")
 options = parser.parse_args()
 
 class EventDataProcessor:
@@ -107,40 +107,51 @@ class EventDataProcessor:
       dist = ROOT.TMath.Sqrt(dist)
       return dist #in cm
     
-    def define_weight(self,w_DIS,SHiP_running=5,N_gen=1*100000): #Each file has 100k events each change N_gen according to files(1) used for analysis.
+    def define_weight(self,SHiP_running=5):
+
+        w_mu=self.event.MCTrack[0].GetWeight()  #weight of the incoming muon*DIS multiplicity normalised to a full spill   sum(w_mu) = nMuons_perspill = number of muons in a spill. w_mu is not the same as N_muperspill/N_gen, where N_gen = nEvents*DISmultiplicity ( events enhanced in Pythia to increase statistics) .
+
+        cross,rho_l=None,None
+
+        for track in self.event.MCTrack:
+            
+            if (track.GetMotherId()!=0): continue
+
+            if track.GetPdgCode()==self.event.MCTrack[0].GetPdgCode():#scattered muon
+                cross=track.GetWeight()    # DIS cross section in mb
+            else:
+                rho_l=track.GetWeight()    # the mean material density along the path of the muon rhoL stored in the DIS daughters
+
+            if cross and rho_l: break
         
-        nPOTinteraction     =(2.e+20)*(SHiP_running/5)
+        N_a=6.022e+23 
+
+        sigma_DIS=cross*1e-27*N_a #cross section cm^2 per mole
+        
+        nPOTinteraction     =(2.e+20)*(SHiP_running/5) #in years
         nPOTinteraction_perspill =5.e+13
+        
+        n_Spill  = nPOTinteraction/nPOTinteraction_perspill  #Number of Spills in SHiP running( default=5) years  
+        
+        weight_i = rho_l*sigma_DIS*w_mu*n_Spill 
+        
+        return weight_i    
 
-        n_Spill  = nPOTinteraction/nPOTinteraction_perspill #number of spill in SHiP_running(default=5) years
-        
-        nNu_perspill=4.51e+11       #number of neutrinos in a spill.
-        
-        N_nu=nNu_perspill*n_Spill   #Expected number of neutrinos in 5 years
-
-        w_nu=nNu_perspill/N_gen     #weight of each neutrino considered scaled to a spill such that sum(w_nu)=(nNu_perspill/N_gen)*N_gen= nNu_perspill = number of neutrinos in a spill.
-        
-        N_A=6.022*10**23
-        E_avg=2.57 #GeV
-        sigma_DIS=7*(10**-39)*E_avg*N_A  #cross section cm^2 per mole
-        
-        return w_DIS*sigma_DIS*w_nu*n_Spill  #(rho_L*N_nu*N_A*neu_crosssection*E_avg)/N_gen     #returns the number of the DIS interaction events of that type in SHiP running(default=5) years.   #DIS_multiplicity=1 here
-        
-    def make_outputfile(self, filenumber):
+    def make_outputfile(self):
 
         inputmatrix = np.array(self.inputmatrix)
         truth       = np.array(self.truth)
         
-        rootfilename    = f"{self.output_dir}datafile_neuDIS_{filenumber}.root"
+        rootfilename    = f"{self.output_dir}datafile_muDIS_{tag}_{self.filenumber}.root"
 
-        file = uproot.recreate(rootfilename)
-        file["tree"] = {
-                    "inputmatrix": inputmatrix,
-                    "truth": truth
-                    }
-
+        with uproot.recreate(rootfilename) as file:
+            file["tree"] = {
+                "inputmatrix": inputmatrix,
+                "truth": truth
+            }
         print(f"\n\nFiles formatted and saved in {rootfilename}")
-        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}.h5"
+
+        h5filename    = f"{self.output_dir}datafile_muDIS_{tag}_{self.filenumber}.h5"
         with h5py.File(h5filename, 'w') as h5file:
             for i in range(inputmatrix.shape[0]):
                 event_name = f"event_{i}"
@@ -151,13 +162,15 @@ class EventDataProcessor:
         self.inputmatrix = []
 
     def process_event(self, sTree, eventNr):
+        
+        self.event = sTree
 
         detList = self.SBTcell_map()
         energy_array = np.zeros(854)
         time_array = np.full(854, -9999) #default value is -9999
         
-        rho_L    =  sTree.MCTrack[0].GetWeight()
-        weight_i =  self.define_weight(rho_L,SHiP_running=5)
+        #rho_L    =  sTree.MCTrack[0].GetWeight()
+        weight_i =  self.define_weight(SHiP_running=5)
         
         t0=sTree.ShipEventHeader.GetEventTime()
 
@@ -165,11 +178,8 @@ class EventDataProcessor:
             detID = str(aDigi.GetDetectorID())
             ID_index = [lastname for lastname, firstname in detList.items() if firstname == detID][0]
             energy_array[ID_index] = aDigi.GetEloss()
-            #time_array[ID_index] = aDigi.GetTDC()
-            correctedTDC=sTree.MCTrack[0].GetStartT()/1e4+(aDigi.GetTDC()-t0-sTree.MCTrack[0].GetStartT()) +t0 #to be changed for new productions after 25.11.2024, resolving existing bug
-            time_array[ID_index] = correctedTDC
-
-
+            time_array[ID_index] = aDigi.GetTDC()
+            
         #nHits=len(sTree.UpstreamTaggerPoint)
 
         for signal in sTree.Particles:
@@ -222,26 +232,36 @@ class EventDataProcessor:
                                                     ) )# inputmatrix has shape (nEvents,size of inputarray)
 
 
-            self.truth.append(1)
+            self.truth.append(2)
             self.global_candidate_id += 1
 
     def process_file(self):
 
         f = ROOT.TFile.Open(self.input_file)
-        filenumber = self.input_file.split("job")[1][1:-36]
+        self.filenumber = options.jobDir.split('_', 1)[1]
         sTree = f.cbmsim
         nEvents = sTree.GetEntries()
+        Pz=0
+        counter=-1
         
-        print(nEvents)
-
         for eventNr,event in enumerate(sTree):
+            if not Pz==event.MCTrack[0].GetPz():
+                Pz=event.MCTrack[0].GetPz()
+                counter+=1
+                DIScount=-1
+            
+            DIScount+=1
+
+            print(eventNr,"MuonID",counter,"DIS-Id",DIScount,event.MCTrack[0].GetWeight(),event.MCTrack[0].GetPx(),event.MCTrack[0].GetPy(),Pz)
             
             if hasattr(event, 'Particles') and len(event.Particles) and len(event.Digi_SBTHits):
-                print(f"neuDIS {filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
+                print(f"muDIS {self.filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
                 self.process_event(event, eventNr)
-                
+        
+        print(f"Total number of entries in the file: {nEvents}")    
+        print(f"Total number of candidates in the file: {self.global_candidate_id}")    
             
-        self.make_outputfile(filenumber)
+        self.make_outputfile()
 
     def read_outputdata(self):
 
@@ -249,10 +269,8 @@ class EventDataProcessor:
             
         for datafile in os.listdir(self.output_dir):
 
-            if not datafile.startswith("datafile_neuDIS_"+options.jobDir.split('_', 1)[1]): continue
-
-            if not 'root' in datafile: continue
-                        
+            if not datafile.startswith(f"datafile_muDIS_{tag}_{self.filenumber}"):continue
+            if not datafile.endswith(".root"):continue                        
             tree = uproot.open(self.output_dir+datafile)["tree"]
             data = tree.arrays(['inputmatrix', 'truth'], library='np')
             
@@ -290,10 +308,14 @@ class EventDataProcessor:
 if options.path:
     path = options.path
 else:
-    path = '/eos/experiment/ship/user/Iaroslava/train_sample_N2024_big/'#'/eos/experiment/ship/user/Iaroslava/train_sample_N2024/'<---older smaller sample.
+    path = '/eos/experiment/ship/simulation/bkg/MuonDIS/'#'/eos/experiment/ship/user/anupamar/muonDIS_test/'#
 
-processor = EventDataProcessor(input_file=path+options.jobDir+"/ship.conical.Genie-TGeant4_rec.root" , geo_file=path+options.jobDir+"/geofile_full.conical.Genie-TGeant4.root", output_dir="./")
+#if 'SBT' in options.jobDir:
+tag=options.jobDir.split('/')[0]
+options.jobDir=options.jobDir.split('/')[-1]
+print(options.jobDir)
+
+processor = EventDataProcessor(input_file=path+tag+'/'+options.jobDir+"/ship.conical.muonDIS-TGeant4_rec.root" , geo_file=path+tag+'/'+options.jobDir+"/geofile_full.conical.muonDIS-TGeant4.root", output_dir="./")
 processor.process_file()
-
 processor.read_outputdata()
 
