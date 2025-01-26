@@ -18,47 +18,22 @@ import h5py
 
 parser = ArgumentParser();
 parser = ArgumentParser(description=__doc__);
-parser.parse_args()
+parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='job_0',  type=str)
+options = parser.parse_args()
 
 
 class EventDataProcessor:
+    
     def __init__(self, input_path,signal_path, output_dir):
         self.input_path = input_path
         self.signal_path= signal_path
         self.geo_file=None #will be updated according to the signal_file
         self.output_dir = output_dir
-        self.global_file_index = 0
         self.global_event_id = 0
         self.inputmatrix = []
         self.truth = [] 
         self.signal_decaychannel={}
         self.detList = None  # Placeholder for cached SBT cell map
-        
-
-    def choose_embg_file(self):
-
-        self.retry=True
-        while self.retry: 
-
-            inputFolders = [inp for inp in os.listdir(self.input_path) if os.path.isdir(os.path.join(self.input_path, inp))]
-            inputFolder = random.choice(inputFolders)
-            inputFolderPath=os.path.join(self.input_path, inputFolder)
-        
-            subFolders = [sub for sub in os.listdir(inputFolderPath) if os.path.isdir(os.path.join(inputFolderPath, sub))]
-            
-            if subFolders: 
-                
-                randomSubFolder = random.choice(subFolders)
-                randomSubFolderPath = os.path.join(inputFolderPath, randomSubFolder)
-                self.embg_file=os.path.join(randomSubFolderPath, "ship.conical.MuonBack-TGeant4.root")
-                f = ROOT.TFile.Open(self.embg_file,"read")
-                try:
-                    embg_tree = f.cbmsim
-                    print(f"Processing MuonInduced BG file:\n{self.embg_file}\n\tEntries: {embg_tree.GetEntries()}")
-                    self.retry=False
-                except:
-                    pass 
-        f.Close()
 
     def load_geofile(self):
         """
@@ -143,7 +118,7 @@ class EventDataProcessor:
         inputmatrix = np.array(self.inputmatrix)
         truth       = np.array(self.truth)
         
-        rootfilename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.root"
+        rootfilename    = f"{self.output_dir}datafile_signalEMBG_{filenumber}.root"
 
         file = uproot.recreate(rootfilename)
         file["tree"] = {
@@ -152,17 +127,18 @@ class EventDataProcessor:
                     }
 
         print(f"\n\nFiles formatted and saved in {rootfilename}")
-        h5filename    = f"{self.output_dir}datafile_neuDIS_{filenumber}_{self.global_file_index}.h5"
+        h5filename    = f"{self.output_dir}datafile_signalEMBG_{filenumber}.h5"
         with h5py.File(h5filename, 'w') as h5file:
             for i in range(inputmatrix.shape[0]):
                 event_name = f"event_{i}"
                 event_group = h5file.create_group(event_name)
                 event_group.create_dataset('data', data=inputmatrix[i])
                 event_group.create_dataset('truth', data=truth[i])
-        print(f"\n\nFiles formatted and saved in {h5filename}")
-        self.global_file_index += 1
+        print(f"\n\nFiles formatted and saved in {h5filename}\n")
+
         self.inputmatrix = []
-    
+        self.truth = []    
+
     def define_t_vtx(self,sTree,candidate):
           
           t0=sTree.ShipEventHeader.GetEventTime()
@@ -269,7 +245,6 @@ class EventDataProcessor:
             self.truth.append(0)
             self.global_event_id+=1
 
-        
     def digitizeSBT(self,embg_vetoPoints,signal_vetoPoints,signal_t0):
         
         ElossPerDetId    = {}
@@ -303,68 +278,77 @@ class EventDataProcessor:
 
     def process_file(self):
         
-        self.choose_embg_file() 
+        #self.choose_embg_file() 
+
 
         Total_events=0
         Success=0
         Total_files=len(os.listdir(self.signal_path))
 
+        f_signal = ROOT.TFile.Open(f"{self.signal_path}/ship.conical.Pythia8-TGeant4_rec.root","read")
         
-        f_embg = ROOT.TFile.Open(self.embg_file,"read")
-        embg_tree = f_embg.cbmsim
-        embg_entries= embg_tree.GetEntries()
+        try:
+            signal_tree = f_signal.cbmsim
+            signal_entries= signal_tree.GetEntries()
+            if self.geo_file==None:
+                self.geo_file=os.path.join(f"{self.signal_path}/geofile_full.conical.Pythia8-TGeant4.root")
+                self.load_geofile()
+                #print(f"File read successfully.\n")
+            Success+=1
+        except Exception as e:
+                print(e)
+        embg_index=0
+        signal_index=0
+        
 
-        for ntuple_list in os.listdir(self.signal_path):
+    #for num,embg_job in enumerate(os.listdir(self.input_path)):
+        print_file=False    
+
+        try:
+            f_embg = ROOT.TFile.Open(f"{self.input_path}/{options.jobDir}/ship.conical.MuonBack-TGeant4.root","read")
+            embg_tree = f_embg.cbmsim
+            embg_entries= embg_tree.GetEntries()
+        except:
+            exit()
+        
+        while embg_index<embg_entries:
             
-            if "ship.conical.EvtCalc-TGeant4_rec.root" not in os.listdir(os.path.join(self.signal_path,ntuple_list)): continue
+            embg_tree.GetEntry(embg_index)
+            signal_tree.GetEntry(signal_index)
             
-            f = ROOT.TFile.Open(os.path.join(self.signal_path,ntuple_list,"ship.conical.EvtCalc-TGeant4_rec.root"))
-            
-            try:
-                signal_tree = f.cbmsim
-                if self.geo_file==None:
-                    self.geo_file=os.path.join(self.signal_path,ntuple_list,'geofile_full.conical.EvtCalc-TGeant4.root')
-                    self.load_geofile()
-                #print(f"File read:{os.path.join(self.signal_path,ntuple_list,'ship.conical.EvtCalc-TGeant4_rec.root')} successfully.\n")
-                Success+=1
-            except Exception as e:
-                #print(f"Error in file:{os.path.join(self.signal_path,ntuple_list,'ship.conical.EvtCalc-TGeant4_rec.root')}\n\t{e}")
+            #if not len(embg_tree.vetoPoint):
+            #    embg_index+=1
+            #    continue
+
+            if not len(signal_tree.Particles): 
+                if signal_index>=signal_entries:
+                #    dummy=input("Now signal defaults to zero, index>number of signal entries-1 ")
+                    signal_index=-1
+                #signal_index = random.randint(0,signal_entries - 1)
+                signal_index+=1
                 continue
-            nEvents = signal_tree.GetEntries()
-
-            Total_events+=nEvents
-
-            for eventNr,signal_event in enumerate(signal_tree):
-                
-                daughters=self.dump(signal_event,0,print_whole_event=False)
-                sorted_daughters = tuple(sorted(daughters))
 
 
-                if sorted_daughters!=('mu+', 'mu-', 'nu_e') or len(signal_event.Particles)==0: continue
-                
-                signal_t0=signal_event.ShipEventHeader.GetEventTime()
+            signal_t0=signal_tree.ShipEventHeader.GetEventTime()
+            combined_Digi_SBThits=self.digitizeSBT(embg_tree.vetoPoint,signal_tree.vetoPoint,signal_t0)
+            
+            #if not combined_Digi_SBThits: continue #only look for events with SBT activity
+            
+            print(f"{options.jobDir} EMBG ev:{embg_index} Signal ev:{signal_index} \t Global_ev:{self.global_event_id} ---> {len(signal_tree.Particles)} reconst. particle(s) in event")
+            
+            self.process_event(signal_tree,embg_tree,combined_Digi_SBThits)
+            print_file=True
+            embg_index+=1                
+            signal_index+=1
 
-                random_index = random.randint(0,embg_entries - 1)
-                embg_tree.GetEntry(random_index)
-                combined_Digi_SBThits=self.digitizeSBT(embg_tree.vetoPoint,signal_event.vetoPoint,signal_t0)
-                
-
-                if not combined_Digi_SBThits: continue #only look for events with SBT activity
-                
-                if sorted_daughters not in self.signal_decaychannel:
-                    self.signal_decaychannel[sorted_daughters]=0
-                self.signal_decaychannel[sorted_daughters]+=1
-
-                print(f"Signal Event{eventNr}\t {self.global_event_id} ---> {len(signal_event.Particles)} reconst. particle(s) in event")
-                self.process_event(signal_event,embg_tree,combined_Digi_SBThits)
-
-
-        for channel, details in self.signal_decaychannel.items():
-            print(f"Decay Channel: {channel} {details} Events")
-        #print(f"\n\n Total Files Available:{Total_files}, cbmsim found only in {Success} files")
+            if signal_index>=signal_entries:
+            #    dummy=input("Now signal defaults to zero, index>number of signal entries-1 ")
+                signal_index=0
+            #signal_index = random.randint(0,signal_entries - 1)
         
-        filenumber=0
-        self.make_outputfile(filenumber)
+        if print_file:
+            filenumber=options.jobDir.split('_')[-1]
+            self.make_outputfile(filenumber)
 
     def read_outputdata(self):
 
@@ -372,7 +356,8 @@ class EventDataProcessor:
             
         for datafile in os.listdir(self.output_dir):
 
-            if not datafile.startswith("datafile_EMBG_"): continue
+            if not datafile.startswith("datafile_signalEMBG_"): continue
+            if not datafile.endswith(".root"): continue
                         
             tree = uproot.open(self.output_dir+datafile)["tree"]
             data = tree.arrays(['inputmatrix', 'truth'], library='np')
@@ -406,10 +391,11 @@ class EventDataProcessor:
         print(f"\tDaughter1_mom\t{signal_details[8]}")
         print(f"\tDaughter2_mom\t{signal_details[9]}")
 
+embg_path='/eos/experiment/ship/simulation/bkg/MuonBack_2024helium/8070735' 
+#inclusive="/eos/experiment/ship/simulation/sig/HNLe/helium/inclusive/Ntuples/" doesnt exist??
+mumunu_mu='/eos/experiment/ship/user/anupamar/signal/mumunu'
 
-embg_path='/eos/experiment/ship/simulation/bkg/MuonBack_2024helium/sc_v6_10_spills' 
-
-signalfile_path="/eos/experiment/ship/simulation/sig/HNL/helium/inclusive/Ntuples/"
+signalfile_path=mumunu_mu
 
 processor = EventDataProcessor(input_path=embg_path , signal_path= signalfile_path, output_dir="./")
 
