@@ -12,7 +12,7 @@ import h5py
 
 parser = ArgumentParser(description=__doc__);
 parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  default='SBT/job_0',  type=str)
-parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed muDIS simulation folder")
+parser.add_argument("-p", "--path",dest="path",required=False,help="Path to the reconstructed muDIS simulation folder",default='/eos/experiment/ship/simulation/bkg/MuonDIS_2024helium/8070735')
 options = parser.parse_args()
 
 class EventDataProcessor:
@@ -305,17 +305,14 @@ class EventDataProcessor:
 
 # Usage:
 
-if options.path:
-    path = options.path
-else:
-    path = '/eos/experiment/ship/simulation/bkg/MuonDIS/'#'/eos/experiment/ship/user/anupamar/muonDIS_test/'#
 
-#if 'SBT' in options.jobDir:
+path = options.path
+
 tag=options.jobDir.split('/')[0]
 options.jobDir=options.jobDir.split('/')[-1]
 print(options.jobDir)
 
-processor = EventDataProcessor(input_file=path+tag+'/'+options.jobDir+"/ship.conical.muonDIS-TGeant4_rec.root" , geo_file=path+tag+'/'+options.jobDir+"/geofile_full.conical.muonDIS-TGeant4.root", output_dir="./")
+processor = EventDataProcessor(input_file=f"{path}/{tag}/{options.jobDir}/ship.conical.muonDIS-TGeant4_rec.root" , geo_file=f"{path}/{tag}/{options.jobDir}/geofile_full.conical.muonDIS-TGeant4.root", output_dir="./")
 processor.process_file()
 processor.read_outputdata()
 
