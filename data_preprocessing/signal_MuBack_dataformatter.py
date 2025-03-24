@@ -188,7 +188,7 @@ class EventDataProcessor:
             detID = str(aDigi.GetDetectorID())
             ID_index = [lastname for lastname, firstname in detList.items() if firstname == detID][0]
             energy_array[ID_index] = aDigi.GetEloss()
-            time_array[ID_index] = aDigi.GetTDC()
+            time_array[ID_index] = float(aDigi.GetTDC())
 
 
         #nHits=len(embg_event.UpstreamTaggerPoint)
