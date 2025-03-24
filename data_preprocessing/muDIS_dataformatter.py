@@ -77,8 +77,7 @@ class EventDataProcessor:
 
              if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
                
-             #t_straw    = hit.GetTime()
-             t_straw    = sTree.MCTrack[0].GetStartT()/1e4+(hit.GetTime()-sTree.MCTrack[0].GetStartT()) #resolving bug. to be changed for new productions
+             t_straw    = hit.GetTime()
              
              d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
 
@@ -107,22 +106,13 @@ class EventDataProcessor:
       dist = ROOT.TMath.Sqrt(dist)
       return dist #in cm
     
-    def define_weight(self,SHiP_running=5):
+    def define_weight(self,SHiP_running=15):
 
         w_mu=self.event.MCTrack[0].GetWeight()  #weight of the incoming muon*DIS multiplicity normalised to a full spill   sum(w_mu) = nMuons_perspill = number of muons in a spill. w_mu is not the same as N_muperspill/N_gen, where N_gen = nEvents*DISmultiplicity ( events enhanced in Pythia to increase statistics) .
 
-        cross,rho_l=None,None
+        cross=self.event.CrossSection
 
-        for track in self.event.MCTrack:
-            
-            if (track.GetMotherId()!=0): continue
-
-            if track.GetPdgCode()==self.event.MCTrack[0].GetPdgCode():#scattered muon
-                cross=track.GetWeight()    # DIS cross section in mb
-            else:
-                rho_l=track.GetWeight()    # the mean material density along the path of the muon rhoL stored in the DIS daughters
-
-            if cross and rho_l: break
+        rho_l=self.event.MCTrack[2].GetWeight()
         
         N_a=6.022e+23 
 
@@ -131,7 +121,7 @@ class EventDataProcessor:
         nPOTinteraction     =(2.e+20)*(SHiP_running/5) #in years
         nPOTinteraction_perspill =5.e+13
         
-        n_Spill  = nPOTinteraction/nPOTinteraction_perspill  #Number of Spills in SHiP running( default=5) years  
+        n_Spill  = nPOTinteraction/nPOTinteraction_perspill  #Number of Spills in SHiP running( default=15) years
         
         weight_i = rho_l*sigma_DIS*w_mu*n_Spill 
         
@@ -169,8 +159,7 @@ class EventDataProcessor:
         energy_array = np.zeros(854)
         time_array = np.full(854, -9999) #default value is -9999
         
-        #rho_L    =  sTree.MCTrack[0].GetWeight()
-        weight_i =  self.define_weight(SHiP_running=5)
+        weight_i =  self.define_weight(SHiP_running=15)
         
         t0=sTree.ShipEventHeader.GetEventTime()
 
@@ -252,8 +241,7 @@ class EventDataProcessor:
             
             DIScount+=1
 
-            print(eventNr,"MuonID",counter,"DIS-Id",DIScount,event.MCTrack[0].GetWeight(),event.MCTrack[0].GetPx(),event.MCTrack[0].GetPy(),Pz)
-            
+            #print(eventNr,"MuonID",counter,"DIS-Id",DIScount,event.MCTrack[0].GetWeight(),event.MCTrack[0].GetPx(),event.MCTrack[0].GetPy(),Pz)
             if hasattr(event, 'Particles') and len(event.Particles) and len(event.Digi_SBTHits):
                 print(f"muDIS {self.filenumber} {eventNr} {self.global_candidate_id} ---> {len(event.Particles)} reconst. particle(s) in event")
                 self.process_event(event, eventNr)
@@ -288,7 +276,7 @@ class EventDataProcessor:
         print("\tshould match timing entries:",np.sum(inputmatrix[0][854:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
         print("\nvertexposition",inputmatrix[0][1708:1711])
         print("\nVertex time:",inputmatrix[0][1711],"ns")
-        print("\nEvent weight:",inputmatrix[0][1712]," over 5 years")
+        print("\nEvent weight:",inputmatrix[0][1712]," over 15 years")
         
         signal_details=inputmatrix[0][1713:]
         print("\nOther Candidate details:")

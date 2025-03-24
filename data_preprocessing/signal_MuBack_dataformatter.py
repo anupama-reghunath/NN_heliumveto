@@ -104,13 +104,13 @@ class EventDataProcessor:
       dist = ROOT.TMath.Sqrt(dist)
       return dist #in cm
 
-    def define_weight(self,event_weight,SHiP_running=5):
+    def define_weight(self,event_weight,SHiP_running=15):
         
         #event_weight=number of muon events per spill
 
         nPOTinteraction     =(2.e+20)*(SHiP_running/5)
         nPOTinteraction_perspill =5.e+13
-        n_Spill  = nPOTinteraction/nPOTinteraction_perspill #number of spill in 5 years
+        n_Spill  = nPOTinteraction/nPOTinteraction_perspill #number of spill in 15 years
         return event_weight*n_Spill
         
     def make_outputfile(self, filenumber):
@@ -182,7 +182,7 @@ class EventDataProcessor:
         
         for track in embg_event.MCTrack: 
                 if track.GetPdgCode() in [-13,13]:
-                        weight_i=self.define_weight(track.GetWeight())#<---weight over 5 years   (track.GetWeight()<---per spill)
+                        weight_i=self.define_weight(track.GetWeight())#<---weight over 15 years   (track.GetWeight()<---per spill)
 
         for aDigi in Digi_SBTHits.values():
             detID = str(aDigi.GetDetectorID())
@@ -376,7 +376,7 @@ class EventDataProcessor:
         print("\tshould match timing entries:",np.sum(inputmatrix[0][854:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
         print("\nvertexposition",inputmatrix[0][1708:1711])
         print("\nVertex time:",inputmatrix[0][1711],"ns")
-        print("\nEvent weight:",inputmatrix[0][1712]," over 5 years")
+        print("\nEvent weight:",inputmatrix[0][1712]," over 15 years")
         
         signal_details=inputmatrix[0][1713:]
         print("\nOther Candidate details:")

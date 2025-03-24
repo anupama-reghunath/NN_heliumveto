@@ -107,16 +107,16 @@ class EventDataProcessor:
       dist = ROOT.TMath.Sqrt(dist)
       return dist #in cm
     
-    def define_weight(self,w_DIS,SHiP_running=5,N_gen=1*100000): #Each file has 100k events each change N_gen according to files(1) used for analysis.
+    def define_weight(self,w_DIS,SHiP_running=15,N_gen=100000*98): #Each file has 100k events each change N_gen according to files(1) used for analysis, and 98 successful jobs
         
         nPOTinteraction     =(2.e+20)*(SHiP_running/5)
         nPOTinteraction_perspill =5.e+13
 
-        n_Spill  = nPOTinteraction/nPOTinteraction_perspill #number of spill in SHiP_running(default=5) years
+        n_Spill  = nPOTinteraction/nPOTinteraction_perspill #number of spill in SHiP_running(default=15) years
         
         nNu_perspill=4.51e+11       #number of neutrinos in a spill.
         
-        N_nu=nNu_perspill*n_Spill   #Expected number of neutrinos in 5 years
+        N_nu=nNu_perspill*n_Spill   #Expected number of neutrinos in 15 years
 
         w_nu=nNu_perspill/N_gen     #weight of each neutrino considered scaled to a spill such that sum(w_nu)=(nNu_perspill/N_gen)*N_gen= nNu_perspill = number of neutrinos in a spill.
         
@@ -157,7 +157,7 @@ class EventDataProcessor:
         time_array = np.full(854, -9999) #default value is -9999
         
         rho_L    =  sTree.MCTrack[0].GetWeight()
-        weight_i =  self.define_weight(rho_L,SHiP_running=5)
+        weight_i =  self.define_weight(rho_L,SHiP_running=15)
         
         t0=sTree.ShipEventHeader.GetEventTime()
 
@@ -167,7 +167,7 @@ class EventDataProcessor:
             energy_array[ID_index] = aDigi.GetEloss()
             #time_array[ID_index] = aDigi.GetTDC()
             correctedTDC=sTree.MCTrack[0].GetStartT()/1e4+(aDigi.GetTDC()-t0-sTree.MCTrack[0].GetStartT()) +t0 #to be changed for new productions after 25.11.2024, resolving existing bug
-            time_array[ID_index] = correctedTDC
+            time_array[ID_index] = float(correctedTDC)
 
 
         #nHits=len(sTree.UpstreamTaggerPoint)
@@ -270,7 +270,7 @@ class EventDataProcessor:
         print("\tshould match timing entries:",np.sum(inputmatrix[0][854:1708] != -9999),"/",len(inputmatrix[0][854:1708]))
         print("\nvertexposition",inputmatrix[0][1708:1711])
         print("\nVertex time:",inputmatrix[0][1711],"ns")
-        print("\nEvent weight:",inputmatrix[0][1712]," over 5 years")
+        print("\nEvent weight:",inputmatrix[0][1712]," over 15 years")
         
         signal_details=inputmatrix[0][1713:]
         print("\nOther Candidate details:")
