@@ -5,9 +5,9 @@ notify_user				= anupama.reghunath@hu-berlin.de
 notification 			= Error
 
 ##############################################################################################################
-error 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/error/muDIS_$(ClusterId).$(ProcId).err
-log 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/log/muDIS_$(ClusterId).$(ProcId).log
-output 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/output/muDIS_$(ClusterId).$(ProcId).out
+error 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/error/signalEMBG_$(ClusterId).$(ProcId).err
+log 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/log/signalEMBG_$(ClusterId).$(ProcId).log
+output 				= /afs/cern.ch/work/a/areghuna/HTCondorfiles/output/signalEMBG_$(ClusterId).$(ProcId).out
 ##############################################################################################################
 
 #request_memory 		= 50 GB
