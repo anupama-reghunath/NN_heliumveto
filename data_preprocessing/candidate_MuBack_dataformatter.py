@@ -315,7 +315,7 @@ class EventDataProcessor:
 			weight_i= embg_weight*self.define_weight_muDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='neuDIS':
-			weight_i= embg_weight**self.define_weight_neuDIS(candidate_event,SHiP_running=15)
+			weight_i= embg_weight*self.define_weight_neuDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='signal':
 			weight_i=embg_weight*1 #do the signal candidates have a weight?
