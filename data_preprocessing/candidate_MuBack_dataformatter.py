@@ -231,79 +231,82 @@ class EventDataProcessor:
 		return embg_file,inputFolder
 		        
 	def digitizeSBT(self,embg_vetoPoints,candidate_vetoPoints,candidate_t0,candidate_event):
-	    
-	    ElossPerDetId    = {}
-	    tOfFlight        = {}
-	    #listOfVetoPoints = {}
-	    digiSBT={}
-	    key=-1
-	     
-	    for vetoPoints in [embg_vetoPoints,candidate_vetoPoints]:
-	        for aMCPoint in vetoPoints:
-	            key+=1
-	            detID=aMCPoint.GetDetectorID()
-	            Eloss=aMCPoint.GetEnergyLoss()
-	            if detID not in ElossPerDetId:
-	                ElossPerDetId[detID]=0
-	                #listOfVetoPoints[detID]=[]
-	                tOfFlight[detID]=[]
-	            ElossPerDetId[detID] += Eloss
-	            #listOfVetoPoints[detID].append(key)
-	            if self.tag=='neuDIS':
+
+		ElossPerDetId    = {}
+		tOfFlight        = {}
+		#listOfVetoPoints = {}
+		digiSBT={}
+		key=-1
+
+		for vetopoint_type,vetoPoints in enumerate([embg_vetoPoints,candidate_vetoPoints]):
+
+			for aMCPoint in vetoPoints:
+				key+=1
+				detID=aMCPoint.GetDetectorID()
+				Eloss=aMCPoint.GetEnergyLoss()
+				if detID not in ElossPerDetId:
+				    ElossPerDetId[detID]=0
+				    #listOfVetoPoints[detID]=[]
+				    tOfFlight[detID]=[]
+				ElossPerDetId[detID] += Eloss
+				#listOfVetoPoints[detID].append(key)
+
+				if self.tag=='neuDIS'and (vetopoint_type==1): #only correct the neuDIS event
 					hittime = candidate_event.MCTrack[0].GetStartT()/1e4+(aMCPoint.GetTime()-candidate_event.MCTrack[0].GetStartT()) #resolve time bug in production. to be removed for new productions post 2024
-	            else:
+				else:
 					hittime = aMCPoint.GetTime()
-	            tOfFlight[detID].append(aMCPoint.GetTime())
-	    
-	    index=0 
-	    for detID in ElossPerDetId:
-	                
-	        aHit = ROOT.vetoHit(detID,ElossPerDetId[detID])
-	        aHit.SetTDC(min( tOfFlight[detID] )+ candidate_t0 )    
-	        if ElossPerDetId[detID]<0.045:    aHit.setInvalid()  
-	        digiSBT[index] = aHit
-	        index=index+1
-	    return digiSBT		
+				tOfFlight[detID].append(hittime)
+
+
+		index=0
+		for detID in ElossPerDetId:
+
+		    aHit = ROOT.vetoHit(detID,ElossPerDetId[detID])
+		    aHit.SetTDC(min( tOfFlight[detID] )+ candidate_t0 )
+		    if ElossPerDetId[detID]<0.045:    aHit.setInvalid()
+		    digiSBT[index] = aHit
+		    index=index+1
+		return digiSBT
 
 
 	def define_t_vtx(self,sTree,candidate):
-	  
-	  t0=sTree.ShipEventHeader.GetEventTime()
-	  
-	  candidatePos = ROOT.TLorentzVector()
-	  candidate.ProductionVertex(candidatePos)
 
-	  d1, d2 = candidate.GetDaughter(0), candidate.GetDaughter(1)        
-	  d1_mc, d2_mc = sTree.fitTrack2MC[d1], sTree.fitTrack2MC[d2]                   
+		t0=sTree.ShipEventHeader.GetEventTime()
 
-	  time_vtx_from_strawhits=[]        
+		candidatePos = ROOT.TLorentzVector()
+		candidate.ProductionVertex(candidatePos)
 
-	  for hit in sTree.strawtubesPoint:            
+		d1, d2 = candidate.GetDaughter(0), candidate.GetDaughter(1)
+		d1_mc, d2_mc = sTree.fitTrack2MC[d1], sTree.fitTrack2MC[d2]
 
-	     if not (int( str( hit.GetDetectorID() )[:1]) ==1 or int( str( hit.GetDetectorID() )[:1]) ==2) : continue #if hit.GetZ() > ( ShipGeo.TrackStation2.z + 0.5*(ShipGeo.TrackStation3.z - ShipGeo.TrackStation2.z) ): continue #starwhits only from T1 and T2 before the SHiP magnet .
+		time_vtx_from_strawhits=[]
 
-	     if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
+		for hit in sTree.strawtubesPoint:
 
-	     if self.tag=='neuDIS':
-			t_straw    = sTree.MCTrack[0].GetStartT()/1e4+(hit.GetTime()-sTree.MCTrack[0].GetStartT()) #resolving bug. to be changed for new productions post 2024
-	     else:
-			t_straw    = hit.GetTime()
+			if not (int( str( hit.GetDetectorID() )[:1]) ==1 or int( str( hit.GetDetectorID() )[:1]) ==2) : continue #if hit.GetZ() > ( ShipGeo.TrackStation2.z + 0.5*(ShipGeo.TrackStation3.z - ShipGeo.TrackStation2.z) ): continue #starwhits only from T1 and T2 before the SHiP magnet .
 
-	     d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
+			if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
 
-	     dist     = np.sqrt( (candidatePos.X()-hit.GetX() )**2+( candidatePos.Y() -hit.GetY())**2+ ( candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm            
+			if self.tag=='neuDIS':
+				t_straw    = sTree.MCTrack[0].GetStartT()/1e4+(hit.GetTime()-sTree.MCTrack[0].GetStartT()) #resolving bug. to be changed for new productions post 2024
+			else:
+				t_straw    = hit.GetTime()
 
-	     Mom          = sTree.MCTrack[hit.GetTrackID()].GetP()/u.GeV
-	     mass         = sTree.MCTrack[hit.GetTrackID()].GetMass()
-	     v            = u.c_light*Mom/np.sqrt(Mom**2+(mass)**2)
+			d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
 
-	     t_vertex   = t_straw-(dist/v)
+			dist     = np.sqrt( (candidatePos.X()-hit.GetX() )**2+( candidatePos.Y() -hit.GetY())**2+ ( candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm
 
-	     time_vtx_from_strawhits.append(t_vertex)
-	      
-	  t_vtx=np.average(time_vtx_from_strawhits)+t0   
+			Mom          = sTree.MCTrack[hit.GetTrackID()].GetP()/u.GeV
+			mass         = sTree.MCTrack[hit.GetTrackID()].GetMass()
+			v            = u.c_light*Mom/np.sqrt(Mom**2+(mass)**2)
 
-	  return t_vtx      
+			t_vertex   = t_straw-(dist/v)
+
+			time_vtx_from_strawhits.append(t_vertex)
+
+		t_vtx=np.average(time_vtx_from_strawhits)+t0
+
+		return t_vtx
 
 
 
@@ -335,7 +338,8 @@ class EventDataProcessor:
 			ID_index = [lastname for lastname, firstname in detList.items() if firstname == detID][0]
 			if aDigi.GetTDC()<10**7:
 				energy_array[ID_index] = aDigi.GetEloss()
-				time_array[ID_index] = float(aDigi.GetTDC()) #neuDIS time correction is missing here!!!!
+				time_array[ID_index] = float(aDigi.GetTDC())
+
 
 
 		#nHits=len(embg_event.UpstreamTaggerPoint)
