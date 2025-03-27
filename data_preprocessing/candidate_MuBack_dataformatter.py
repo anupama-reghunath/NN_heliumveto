@@ -230,7 +230,7 @@ class EventDataProcessor:
 		
 		return embg_file,inputFolder
 		        
-	def digitizeSBT(self,embg_vetoPoints,candidate_vetoPoints,candidate_t0):
+	def digitizeSBT(self,embg_vetoPoints,candidate_vetoPoints,candidate_t0,candidate_event):
 	    
 	    ElossPerDetId    = {}
 	    tOfFlight        = {}
@@ -249,6 +249,10 @@ class EventDataProcessor:
 	                tOfFlight[detID]=[]
 	            ElossPerDetId[detID] += Eloss
 	            #listOfVetoPoints[detID].append(key)
+	            if self.tag=='neuDIS':
+					hittime = candidate_event.MCTrack[0].GetStartT()/1e4+(aMCPoint.GetTime()-candidate_event.MCTrack[0].GetStartT()) #resolve time bug in production. to be removed for new productions post 2024
+	            else:
+					hittime = aMCPoint.GetTime()
 	            tOfFlight[detID].append(aMCPoint.GetTime())
 	    
 	    index=0 
@@ -279,8 +283,12 @@ class EventDataProcessor:
 	     if not (int( str( hit.GetDetectorID() )[:1]) ==1 or int( str( hit.GetDetectorID() )[:1]) ==2) : continue #if hit.GetZ() > ( ShipGeo.TrackStation2.z + 0.5*(ShipGeo.TrackStation3.z - ShipGeo.TrackStation2.z) ): continue #starwhits only from T1 and T2 before the SHiP magnet .
 
 	     if not (hit.GetTrackID()==d1_mc or hit.GetTrackID()==d2_mc) : continue
-	       
-	     t_straw    = hit.GetTime() #neuDIS correction is missing here!!!!!
+
+	     if self.tag=='neuDIS':
+			t_straw    = sTree.MCTrack[0].GetStartT()/1e4+(hit.GetTime()-sTree.MCTrack[0].GetStartT()) #resolving bug. to be changed for new productions post 2024
+	     else:
+			t_straw    = hit.GetTime()
+
 	     d_strawhit  = [hit.GetX(),hit.GetY(),hit.GetZ()]
 
 	     dist     = np.sqrt( (candidatePos.X()-hit.GetX() )**2+( candidatePos.Y() -hit.GetY())**2+ ( candidatePos.Z()-hit.GetZ() )**2) #distance to the vertex #in cm            
@@ -312,13 +320,13 @@ class EventDataProcessor:
 
 		if self.tag=='muDIS':
 
-			weight_i= embg_weight*self.define_weight_muDIS(candidate_event,SHiP_running=15)
+			weight_i= embg_weight * self.define_weight_muDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='neuDIS':
-			weight_i= embg_weight*self.define_weight_neuDIS(candidate_event,SHiP_running=15)
+			weight_i= embg_weight * self.define_weight_neuDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='signal':
-			weight_i=embg_weight*1 #do the signal candidates have a weight?
+			weight_i= embg_weight * 1 #do the signal candidates have a weight?
 
 
 		for aDigi in Digi_SBTHits.values():
@@ -464,7 +472,7 @@ class EventDataProcessor:
 
 				embg_tree.GetEntry(embg_index)
 
-				combined_Digi_SBTHits=self.digitizeSBT(embg_tree.vetoPoint,candidate_tree.vetoPoint,candidate_t0)
+				combined_Digi_SBTHits=self.digitizeSBT(embg_tree.vetoPoint,candidate_tree.vetoPoint,candidate_t0,candidate_tree)
 
 				if combined_Digi_SBTHits: 
 					print(f" Combining MuBack Event:{embg_index}...\n \t\t\t{len(combined_Digi_SBTHits)} Digihits in the combined event now")
