@@ -181,7 +181,7 @@ class Candidate_MuBack_dataformatter:
 
 			if "geofile_full.conical.MuonBack-TGeant4.root" not in os.listdir(f"{self.bg_path}/{job_folder}"): continue
 			
-			#if options.testing_code and jobNr>100: break 
+			if options.testing_code and jobNr>50: break
 			
 			try:
 
@@ -250,18 +250,26 @@ class Candidate_MuBack_dataformatter:
 			exit(1)
 
 
-	def append_vetoPoints(self,vetoPoints):
+	def append_vetoPoints(self,vetoPoints,candidate_event=None):
 
 		for aMCPoint in vetoPoints:
-		    
-		    detID=aMCPoint.GetDetectorID()
-		    Eloss=aMCPoint.GetEnergyLoss()
-		    
-		    if detID not in self.ElossPerDetId:
-		        self.ElossPerDetId[detID]=0
-		        self.tOfFlight[detID]=[]
-		    self.ElossPerDetId[detID] += Eloss
-		    self.tOfFlight[detID].append(aMCPoint.GetTime())
+
+			detID=aMCPoint.GetDetectorID()
+			Eloss=aMCPoint.GetEnergyLoss()
+
+			if detID not in self.ElossPerDetId:
+			    self.ElossPerDetId[detID]=0
+			    self.tOfFlight[detID]=[]
+
+			self.ElossPerDetId[detID] += Eloss
+
+			if self.tag=='neuDIS'and candidate_event:
+				hittime = candidate_event.MCTrack[0].GetStartT()/1e4+(aMCPoint.GetTime()-candidate_event.MCTrack[0].GetStartT()) #resolve time bug in production. to be removed for new productions post 2024
+			else:
+				hittime = aMCPoint.GetTime()
+
+			self.tOfFlight[detID].append(hittime)
+
 
 	def digitizecombinedSBT(self,candidate_t0):
 	    
@@ -479,7 +487,7 @@ class Candidate_MuBack_dataformatter:
 			self.ElossPerDetId    = {}
 			self.tOfFlight        = {}
 				
-			self.append_vetoPoints(candidate_event.vetoPoint)
+			self.append_vetoPoints(candidate_event.vetoPoint,candidate_event)
 				
 			mask = np.abs(bg_event_t0s - candidate_t0) <= 75
 			matching_entries = bg_event_entries[mask]
@@ -548,7 +556,7 @@ class Candidate_MuBack_dataformatter:
 			subtag = f"batch_{options.startEvent//options.nEvents}"
 			filenumber=f"{self.tag}_{options.jobDir}_{subtag}_MuBack"
 			self.rootfilename=self.make_outputfile(filenumber)
-
+			self.inspect_outputfile()
 		print("------------------------------------------------------------------------------------------------------------------------")
 
 	def inspect_outputfile(self):
@@ -591,5 +599,5 @@ class Candidate_MuBack_dataformatter:
 # Initialize and run the analysis
 abc = Candidate_MuBack_dataformatter(candidatefile_path,options.embg_path,tag)
 abc.run_analysis()
-abc.inspect_outputfile()
+
 #ut.writeHists(h,"plots_datafile.root")
