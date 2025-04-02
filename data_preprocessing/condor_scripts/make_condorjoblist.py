@@ -2,6 +2,7 @@ import os
 import csv
 import re
 from argparse import ArgumentParser
+import ROOT
 
 parser = ArgumentParser()
 
@@ -34,7 +35,16 @@ with open(path_to_output+options.filename, 'w') as filekey:
 
 			if options.filename.startswith("joblists_muDIS_ECN3"):	
 				tag=inputDir.split('/')[-1]
-				csvwriter.writerow([f"{tag}/{inputFile}"])
+				try:
+					with ROOT.TFile.Open(f"{inputDir}/{inputFile}/ship.conical.muonDIS-TGeant4_rec.root","read") as rootfile:	
+						tree = rootfile.cbmsim
+						nEvents= tree.GetEntries()
+						startEvent=0
+						while startEvent<nEvents:
+							csvwriter.writerow([f"{tag}/{inputFile}",startEvent])
+							startEvent+=100
+				except Exception as e:
+					print(e)
 			
 			if options.filename=="joblists_EMBG_ECN3_2024.csv":
 				csvwriter.writerow([inputFile])	
