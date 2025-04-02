@@ -1,35 +1,33 @@
 #!/usr/bin/env python
-"""Script to format candidate+Muinduced Background data file for NN studies.
-SBT response for each signal candidate is combined with a randomly chosen EMBG file on an MC level (and then digitised) .
 """
-
-import ROOT
-import uproot
-import numpy as np
-from rootpyPickler import Unpickler
-import os
-import csv
+Script to format candidate+Muinduced Background data file for NN studies.
+SBT response for each candidate event is combined with EMBG events on an MC level (and then digitised) .
+The number of EMBG events to combine is determined by the weight of the EMBG event.
+"""
 from argparse import ArgumentParser
-import shipunit as u
-import random
+import numpy as np
+import os,ROOT
+import uproot
+from rootpyPickler import Unpickler
+from tabulate import tabulate
 import h5py
+#import rootUtils as ut
+import shipunit as u
+import csv
+import time
 import glob
 
-pdg = ROOT.TDatabasePDG.Instance()
 
-#CHANGE signale file_path to candidate_file_path
-
-parser = ArgumentParser();
 parser = ArgumentParser(description=__doc__);
 parser.add_argument("-i", "--jobDir",dest="jobDir",help="job name of input file",  type=str)
+parser.add_argument("-s", "--startEvent",dest="startEvent",help="start Event of the candidate file", type=int, default=0)
+parser.add_argument("-n", "--nEvents",dest="nEvents",help="nEvents per root file", type=int, default=100)
 parser.add_argument("--muDIS", "--muDIS"	,dest="muDIS",help="produce muonDIS+MuBack files", required=False, action='store_true',default=False)
 parser.add_argument("--neuDIS", "--neuDIS"	,dest="neuDIS",help="produce neuDIS+MuBack files", required=False, action='store_true',default=False)
 parser.add_argument("--signal", "--signal"	,dest="signal",help="produce signal+MuBack files", required=False, action='store_true',default=False)
-parser.add_argument('--embg_path', dest='embg_path' , help='path to the MuonBack files'	, required=False,default='/eos/experiment/ship/simulation/bkg/MuonBack_2024helium/8070735')
-parser.add_argument('--test'    	, dest='testing_code' 	, help='Run Test'   , required=False, action='store_true',default=False)
+parser.add_argument('--embg_path', dest='embg_path' , help='Path to MuonBack files'	, required=False,default='/eos/experiment/ship/simulation/bkg/MuonBack_2024helium/8070735',type=str)
+parser.add_argument("--test"          , dest="testing_code" , help="Run Test"              , required=False, action="store_true",default=False)
 options = parser.parse_args()
-
-embg_path=options.embg_path
 
 if not(options.muDIS or options.neuDIS or options.signal):
 	print("Select a candidate type\nExit Normally")
@@ -54,100 +52,62 @@ if options.signal:
 	options.jobDir='job_0'
 	candidatefile_path='/eos/experiment/ship/user/anupamar/signal/mumunu'
 
-print(f"\n\nGenerating {tag}+ MuBack samples now\n\nMuBack filepath={embg_path}\nCandidate filepath: {candidatefile_path}\n\n")
+#h={}
 
-if options.testing_code:
+#ut.bookHist(h,  "candidate_t0","; candidate t0 (ns); nEvents", 1000,0,10^9)
+#ut.bookHist(h,  "bg_t0","; MuonBack t0 (ns); nEvents", 1000,0,10^9)
+#ut.bookHist(h,  "nSBThits","; nSBThits per checked event (no threshold); nEvents checked", 1000,0,1000)
 
-	seed_value = 42
-else:
-	import time	
-	seed_value = int(time.time())
+class Candidate_MuBack_dataformatter:
+	def __init__(self,candidate_path,bg_path,tag):
 
-print(f"Setting Seed= {seed_value}")
-
-random.seed(seed_value)
-
-
-#-----------------------------------------------------------------------------
-
-class EventDataProcessor:
-	def __init__(self, input_path,candidate_path, output_dir,tag):
+		print(f"\n\nGenerating {tag}+ MuBack samples now\n\nMuBack filepath={bg_path}\nCandidate filepath: {candidate_path}\n\n")
+		
 		self.tag=tag
-		self.input_path = input_path
-		self.candidate_path= candidate_path
-		self.geo_file=None #will be updated according to the candidate_file
-		self.output_dir = output_dir
-		self.global_event_id = 0
+		self.candidate_path=candidate_path
+		self.bg_path=bg_path
+		
+		self.random=ROOT.TRandom()
+		
+		if options.testing_code:
+			seed_value = int(123456)
+		else:
+			seed_value = int(time.time())
+		
+		print(f"Setting Seed: {seed_value}")
+		self.random.SetSeed(seed_value)
+		
+		#ut.bookHist(h,  f"Edep_0MeV",f"Threshold= 0 MeV; E deposition per cell (GeV); nEvents checked", 100,0,1) #"nEvents checked" is after weighting and then sampling
+		
+		self.detList = None  # Placeholder for cached SBT cell map
+		self.geo_file=None
+
 		self.inputmatrix = []
 		self.truth = [] 
-		self.detList = None  # Placeholder for cached SBT cell map
-		self.embg_file,self.MuBack_jobDir=self.choose_embg_file() 
+		
+		self.build_embgchain()
+		
+		self.print_file=False
+		
+		# At class level
+		self.embg_meta = []  # List of dicts with embgNr, weight, etc.
+
 
 	def load_geofile(self):
-	    """
-	    Load the geometry file and set the global geometry manager.
-	    """
-	    try:
-	        fgeo = ROOT.TFile(self.geo_file)  
-	        self.fGeo = fgeo.FAIRGeom  
-	        ROOT.gGeoManager = self.fGeo  
+		"""
+		Load the geometry file and set the global geometry manager.
+		"""
+		try:
+			fgeo = ROOT.TFile(self.geo_file)  
+			self.fGeo = fgeo.FAIRGeom  
+			ROOT.gGeoManager = self.fGeo  
 
-	        upkl    = Unpickler(fgeo)
-	        self.ShipGeo = upkl.load('ShipGeo')
-	        print(f"Loaded geometry file: {self.geo_file}")
-	    except Exception as e:
-	        raise FileNotFoundError(f"Error loading geo file: {self.geo_file}. Error: {e}")
+			upkl    = Unpickler(fgeo)
+			self.ShipGeo = upkl.load('ShipGeo')
+			print(f"Loaded geometry file: {self.geo_file}")
+		except Exception as e:
+			raise FileNotFoundError(f"Error loading geo file: {self.geo_file}. Error: {e}")
 
-	def SBTcell_map(self): #provides a cell map with index in [0,853] for each cell.
-
-	    if self.detList is not None:
-	        return  # If the map is already built, no need to rebuild
-	    try:
-	        fGeo = ROOT.gGeoManager
-	        detList = {}
-	        LiSC = fGeo.GetTopVolume().GetNode('DecayVolume_1').GetVolume().GetNode('T2_1').GetVolume().GetNode('VetoLiSc_0')
-	        index = -1
-	        for LiSc_cell in LiSC.GetVolume().GetNodes():
-	            index += 1
-	            name = LiSc_cell.GetName()
-	            detList[index] = name[-6:]
-	        return detList
-	    except Exception as e:
-	        print(e)
-
-	def dump(self,event,mom_threshold=0):
-
-	    headers=['#','particle','pdgcode','mother_id','Momentum [Px,Py,Pz] (GeV/c)','StartVertex[x,y,z] (m)','Process', 'GetWeight()', ]
-	    
-	    event_table=[]
-	    for trackNr,track in enumerate(event.MCTrack): 
-	        
-	        if track.GetP()/u.GeV < mom_threshold :  continue
-	        
-	        try: particlename=pdg.GetParticle(track.GetPdgCode()).GetName()
-	        except: particlename='----'
-
-	        event_table.append([trackNr,
-	                        particlename,
-	                        track.GetPdgCode(),
-	                        track.GetMotherId(),
-	                        f"[{track.GetPx()/u.GeV:7.3f},{track.GetPy()/u.GeV:7.3f},{track.GetPz()/u.GeV:7.3f}]",
-	                        f"[{track.GetStartX()/u.m:7.3f},{track.GetStartY()/u.m:7.3f},{track.GetStartZ()/u.m:7.3f}]",
-	                        track.GetProcName().Data(),
-	                        track.GetWeight()
-	                        ])
-	    
-	    print(tabulate(event_table,headers=headers,floatfmt=".3f",tablefmt='simple_outline'))
-
-	def ImpactParameter(self,point,tPos,tMom):
-	  t = 0
-	  if hasattr(tMom,'P'): P = tMom.P()
-	  else:                 P = tMom.Mag()
-	  for i in range(3):   t += tMom(i)/P*(point(i)-tPos(i)) 
-	  dist = 0
-	  for i in range(3):   dist += (point(i)-tPos(i)-t*tMom(i)/P)**2
-	  dist = ROOT.TMath.Sqrt(dist)
-	  return dist #in cm
 
 	def define_weight_MuBack(self,event_weight,SHiP_running=15):
 	    
@@ -199,75 +159,140 @@ class EventDataProcessor:
 	    
 	    return w_DIS*sigma_DIS*w_nu*n_Spill  #(rho_L*N_nu*N_A*neu_crosssection*E_avg)/N_gen     #returns the number of the DIS interaction events of that type in SHiP running(default=5) years.   #DIS_multiplicity=1 here
 
-	def choose_embg_file(self):
+	def generate_event_time_in_spill(self,eventweight,starttime=0,endtime=10**9):
+		return np.array([self.random.Uniform(starttime, endtime) for _ in range(int(eventweight))])  
 
-		retry=True
-		f=None
+	
+	def assign_event_time_candidate(self,nevents):
 
-		while retry: 
+		print("Assigning t0 time for candidate events now...")
 
-		    inputFolders = [inp for inp in os.listdir(self.input_path) if os.path.isdir(os.path.join(self.input_path, inp))]
-		    inputFolder = random.choice(inputFolders)
+		self.candidate_eventtimes=self.generate_event_time_in_spill(eventweight=nevents,starttime=self.timeframe[0]+75,endtime=self.timeframe[1]-75)
 
-		    inputFolderPath=os.path.join(self.input_path, inputFolder)        
-
-		    if 'geofile_full.conical.MuonBack-TGeant4.root' not in os.listdir(inputFolderPath): 
-		    	print("No geofile present in {inputFolderPath}, retrying")
-		    	continue
-		    
-		    embg_file=os.path.join(inputFolderPath, "ship.conical.MuonBack-TGeant4.root")
-		    
-		    try:
-
-		    	with ROOT.TFile.Open(embg_file,"read") as f:
-			        
-			        embg_tree = f.cbmsim
-			        print(f"Random Sampling events from MuonBack file:\n{embg_file}, nEntries: {embg_tree.GetEntries()}\n")
-			        retry=False
-
-		    except Exception as e:
-		    	print(e)
+		print(f"Signal times assigned,{len(self.candidate_eventtimes)} entries available")
 		
-		return embg_file,inputFolder
-		        
-	def digitizeSBT(self,embg_vetoPoints,candidate_vetoPoints,candidate_t0,candidate_event):
+	def build_embgchain(self):
 
-		ElossPerDetId    = {}
-		tOfFlight        = {}
-		#listOfVetoPoints = {}
-		digiSBT={}
-		key=-1
+		self.embg_chain = ROOT.TChain("cbmsim")
 
-		for vetopoint_type,vetoPoints in enumerate([embg_vetoPoints,candidate_vetoPoints]):
+		for jobNr,job_folder in enumerate(os.listdir(self.bg_path)):
+		
+			if not job_folder.startswith('job'): continue # to ignore the README
 
-			for aMCPoint in vetoPoints:
-				key+=1
-				detID=aMCPoint.GetDetectorID()
-				Eloss=aMCPoint.GetEnergyLoss()
-				if detID not in ElossPerDetId:
-				    ElossPerDetId[detID]=0
-				    #listOfVetoPoints[detID]=[]
-				    tOfFlight[detID]=[]
-				ElossPerDetId[detID] += Eloss
-				#listOfVetoPoints[detID].append(key)
+			if "geofile_full.conical.MuonBack-TGeant4.root" not in os.listdir(f"{self.bg_path}/{job_folder}"): continue
+			
+			#if options.testing_code and jobNr>100: break 
+			
+			try:
 
-				if self.tag=='neuDIS'and (vetopoint_type==1): #only correct the neuDIS event
-					hittime = candidate_event.MCTrack[0].GetStartT()/1e4+(aMCPoint.GetTime()-candidate_event.MCTrack[0].GetStartT()) #resolve time bug in production. to be removed for new productions post 2024
-				else:
-					hittime = aMCPoint.GetTime()
-				tOfFlight[detID].append(hittime)
+				file_path=f"{self.bg_path}/{job_folder}/ship.conical.MuonBack-TGeant4_rec.root"
+				self.embg_chain.Add(file_path)
+				#print(f"{file_path} added to TChain")
+				if self.geo_file is None:
+					self.geo_file=os.path.join(f"{self.bg_path}/{job_folder}/geofile_full.conical.MuonBack-TGeant4.root")
+					self.load_geofile()
+				
+			except Exception as e:
+				print(f"build_embgchain error:{e}")
+
+		print(f"Number of events in the MuBack sample {self.embg_chain.GetEntries()}")
+		# Disable all branches then enable only those used in the analysis
+		self.embg_chain.SetBranchStatus("*", 0)
+		self.embg_chain.SetBranchStatus("Digi_SBTHits*", 1)
+		self.embg_chain.SetBranchStatus("vetoPoint*", 1)
+		self.embg_chain.SetBranchStatus("MCTrack*", 1)
+		self.embg_chain.SetBranchStatus("digiSBT2MC*", 1)
+		self.embg_chain.SetCacheSize(10000000)  # 10 MB cache, adjust as needed
 
 
-		index=0
-		for detID in ElossPerDetId:
+	def assign_event_time_bg(self):
+		
+		start = time.time()
 
-		    aHit = ROOT.vetoHit(detID,ElossPerDetId[detID])
-		    aHit.SetTDC(min( tOfFlight[detID] )+ candidate_t0 )
-		    if ElossPerDetId[detID]<0.045:    aHit.setInvalid()
-		    digiSBT[index] = aHit
-		    index=index+1
-		return digiSBT
+		print(f"time frame used:{self.timeframe}")
 
+		print("Assigning t0 time for MuBack events now...")
+		
+		self.bg_eventtimes=[]
+		
+		for embgNr,self.embg_event in enumerate(self.embg_chain):
+
+			for track in self.embg_event.MCTrack: 
+				if track.GetPdgCode() in [-13,13]:
+					self.weight_i=track.GetWeight() #(track.GetWeight()<---per spill)      (self.define_weight(track.GetWeight())<---weight over 5 years)
+					break
+
+			#if options.testing_code:
+			#	eventtimes=self.generate_event_time_in_spill(self.weight_i,starttime=self.timeframe[0],endtime=self.timeframe[1]) 
+			#else:
+			eventtimes=self.generate_event_time_in_spill(self.weight_i) 
+			
+			valid_mask = (eventtimes > self.timeframe[0]) & (eventtimes < self.timeframe[1])
+			valid_times = eventtimes[valid_mask]
+			
+			if valid_times.size == 0:
+			    continue # if no event time falls within the timeframe
+			
+			#print(f"\tMuBack EventNr {embgNr} falls within the timeframe")			  
+			
+			# Fill histogram and record the valid times
+			for t in valid_times:
+			    #h['bg_t0'].Fill(t)
+			    self.bg_eventtimes.append({"entry": embgNr, "t0": t})
+
+		print(f"BG times assigned,{len(self.bg_eventtimes)} (weighted) events available within timeframe [{self.timeframe[0]},{self.timeframe[1]}]")
+
+		end = time.time()
+
+		print(f"[TIMER] assign_event_time_bg loop took: {end - start:.3f} seconds")
+
+		if not len(self.bg_eventtimes):
+			exit(1)
+
+
+	def append_vetoPoints(self,vetoPoints):
+
+		for aMCPoint in vetoPoints:
+		    
+		    detID=aMCPoint.GetDetectorID()
+		    Eloss=aMCPoint.GetEnergyLoss()
+		    
+		    if detID not in self.ElossPerDetId:
+		        self.ElossPerDetId[detID]=0
+		        self.tOfFlight[detID]=[]
+		    self.ElossPerDetId[detID] += Eloss
+		    self.tOfFlight[detID].append(aMCPoint.GetTime())
+
+	def digitizecombinedSBT(self,candidate_t0):
+	    
+	    index=0 
+	    digiSBT={}
+	    
+	    for detID in self.ElossPerDetId:
+	        aHit = ROOT.vetoHit(detID,self.ElossPerDetId[detID])
+	        aHit.SetTDC(min( self.tOfFlight[detID] )+ candidate_t0 )    
+	        if self.ElossPerDetId[detID]<0.045:    aHit.setInvalid()  
+	        digiSBT[index] = aHit
+	        index=index+1
+	    return digiSBT		
+
+	def SBTcell_map(self): #provides a cell map with index in [0,853] for each cell.
+
+	    if self.detList is not None:
+	        return  # If the map is already built, no need to rebuild
+	    try:
+	        fGeo = ROOT.gGeoManager
+	        detList = {}
+	        LiSC = fGeo.GetTopVolume().GetNode('DecayVolume_1').GetVolume().GetNode('T2_1').GetVolume().GetNode('VetoLiSc_0')
+	        index = -1
+	        for LiSc_cell in LiSC.GetVolume().GetNodes():
+	            index += 1
+	            name = LiSc_cell.GetName()
+	            detList[index] = name[-6:]
+	        return detList
+	    except Exception as e:
+	        print(e)
+	
 
 	def define_t_vtx(self,sTree,candidate):
 
@@ -308,29 +333,59 @@ class EventDataProcessor:
 
 		return t_vtx
 
+	def ImpactParameter(self,point,tPos,tMom):
+	  t = 0
+	  if hasattr(tMom,'P'): P = tMom.P()
+	  else:                 P = tMom.Mag()
+	  for i in range(3):   t += tMom(i)/P*(point(i)-tPos(i)) 
+	  dist = 0
+	  for i in range(3):   dist += (point(i)-tPos(i)-t*tMom(i)/P)**2
+	  dist = ROOT.TMath.Sqrt(dist)
+	  return dist #in cm  
+
+	def make_outputfile(self, filenumber):
+
+	    inputmatrix = np.array(self.inputmatrix)
+	    truth       = np.array(self.truth)
+	    
+	    rootfilename    = f"datafile_{filenumber}.root"
+
+	    file = uproot.recreate(rootfilename)
+	    file["tree"] = {
+	                "inputmatrix": inputmatrix,
+	                "truth": truth
+	                }
+	    
+	    h5filename    = f"datafile_{filenumber}.h5"
+	    with h5py.File(h5filename, 'w') as h5file:
+	        for i in range(inputmatrix.shape[0]):
+	            event_name = f"event_{i}"
+	            event_group = h5file.create_group(event_name)
+	            event_group.create_dataset('data', data=inputmatrix[i])
+	            event_group.create_dataset('truth', data=truth[i])
+	    
+	    print(f"\n\nData succesfully formatted and saved in {h5filename},{rootfilename} \n")
+
+	    self.inputmatrix = []
+	    self.truth = []  
+
+	    return rootfilename
 
 
-	def process_event(self, candidate_event,embg_event,Digi_SBTHits):
+	def process_event(self, candidate_event,Digi_SBTHits):
 
 		detList = self.SBTcell_map()
 		energy_array = np.zeros(854)
 		time_array = np.full(854, -9999) #default value is -9999
 
-		for track in embg_event.MCTrack: 
-		        if track.GetPdgCode() in [-13,13]:
-		                embg_weight=self.define_weight_MuBack(track.GetWeight(),SHiP_running=15)#<---weight over 15 years   (track.GetWeight()<---per spill)
-		                break
-
 		if self.tag=='muDIS':
-
-			weight_i= embg_weight * self.define_weight_muDIS(candidate_event,SHiP_running=15)
+			weight_i= self.define_weight_muDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='neuDIS':
-			weight_i= embg_weight * self.define_weight_neuDIS(candidate_event,SHiP_running=15)
+			weight_i= self.define_weight_neuDIS(candidate_event,SHiP_running=15)
 
 		if self.tag=='signal':
-			weight_i= embg_weight * 1 #do the signal candidates have a weight?
-
+			weight_i= 1 #do the signal candidates have a weight?
 
 		for aDigi in Digi_SBTHits.values():
 
@@ -339,8 +394,6 @@ class EventDataProcessor:
 			if aDigi.GetTDC()<10**7:
 				energy_array[ID_index] = aDigi.GetEloss()
 				time_array[ID_index] = float(aDigi.GetTDC())
-
-
 
 		#nHits=len(embg_event.UpstreamTaggerPoint)
 
@@ -395,111 +448,114 @@ class EventDataProcessor:
 		    
 		    self.truth.append(0)
 
-	def make_outputfile(self, filenumber):
 
-	    inputmatrix = np.array(self.inputmatrix)
-	    truth       = np.array(self.truth)
-	    
-	    rootfilename    = f"{self.output_dir}datafile_{filenumber}.root"
+	def combine_events(self,startEvent):
 
-	    file = uproot.recreate(rootfilename)
-	    file["tree"] = {
-	                "inputmatrix": inputmatrix,
-	                "truth": truth
-	                }
+		start = time.time()
 
-	    print(f"\n\nFiles formatted and saved in {rootfilename}")
-	    
-	    h5filename    = f"{self.output_dir}datafile_{filenumber}.h5"
-	    with h5py.File(h5filename, 'w') as h5file:
-	        for i in range(inputmatrix.shape[0]):
-	            event_name = f"event_{i}"
-	            event_group = h5file.create_group(event_name)
-	            event_group.create_dataset('data', data=inputmatrix[i])
-	            event_group.create_dataset('truth', data=truth[i])
-	    print(f"\n\nFiles formatted and saved in {h5filename}\n")
+		# Once before the loop
+		bg_event_t0s = np.array([e["t0"] for e in self.bg_eventtimes])
+		bg_event_entries = np.array([e["entry"] for e in self.bg_eventtimes])
 
-	    self.inputmatrix = []
-	    self.truth = []  
-	    return rootfilename
+		print("Digihits with odd times are omitted!")
+		
+		tabulate_header = ['Candidate Event Index','Candidate t0 (ns)','Candidate_nVetoPoints','MuBack Event Index','MuBack t0 (ns)', 'MuBack nVetoPoints','Total_cumulate_nVetoPoints ','Total_Digi_SBTHits']
+		
+		for i,candidate_t0 in enumerate(self.candidate_eventtimes):
+			
+			candidateNr= startEvent+i 
+			
+			self.candidate_tree.GetEntry(candidateNr)
+			
+			candidate_event = self.candidate_tree
+			
+			if not len(candidate_event.Particles): continue
+			if not len(candidate_event.vetoPoint): continue
+			
+				
+			#h['candidate_t0'].Fill(candidate_t0) 
+			table_data=[]
 
-	def process_file(self):
+			self.ElossPerDetId    = {}
+			self.tOfFlight        = {}
+				
+			self.append_vetoPoints(candidate_event.vetoPoint)
+				
+			mask = np.abs(bg_event_t0s - candidate_t0) <= 75
+			matching_entries = bg_event_entries[mask]
+			matching_t0s = bg_event_t0s[mask]
+			
+			for bg_t0, entry in zip(matching_t0s, matching_entries):
 
+				self.embg_chain.GetEntry(entry)
+				
+				self.embg_event = self.embg_chain
+								
+				self.append_vetoPoints(self.embg_event.vetoPoint)
+
+				table_data.append([
+							candidateNr,  # Signal Event Index
+							round(candidate_t0, 3),  # Signal Time (ns)
+							len(candidate_event.vetoPoint), #number of vetoPoints in the candidate event
+							entry,  # Background Event Number
+							round(bg_t0, 3),  # BG Time (ns)
+							len(self.embg_event.vetoPoint), #number of vetoPoints in the EMBG event
+							sum(len(vetopoints) for vetopoints in self.tOfFlight.values()),
+							len(self.ElossPerDetId),#number of digihits
+							])
+			
+			combined_Digi_SBTHits=self.digitizecombinedSBT(candidate_event.ShipEventHeader.GetEventTime())
+					
+			self.process_event(candidate_event,combined_Digi_SBTHits)
+
+			if combined_Digi_SBTHits:
+				
+				print(f"\nDigitisation Table:\n Candidate EventNr{candidateNr}, Number of recon candidates:{len(candidate_event.Particles)}, nMuBack events combined = {len(table_data)}, nDigihits: {len(combined_Digi_SBTHits)}")
+				print(tabulate(table_data, headers=tabulate_header, tablefmt="pretty"))
+				self.print_file=True
+
+
+		end = time.time()
+
+		print(f"[TIMER] combine_events loop took: {end - start:.3f} seconds")
+
+	def run_analysis(self):
+		
 		file_name = glob.glob(f"{self.candidate_path}/ship.conical*_rec.root")[0]
 		f_candidate = ROOT.TFile.Open(file_name,"read")
 		print("Opened file:", file_name)
-		#f_candidate = ROOT.TFile.Open(f"{self.candidate_path}/ship.conical.Pythia8-TGeant4_rec.root","read")
 
-		try:
-			candidate_tree = f_candidate.cbmsim
-			candidate_entries= candidate_tree.GetEntries()
-			if self.geo_file==None:
-				self.geo_file=glob.glob(f"{self.candidate_path}/geofile_full*.root")[0]
-				#self.geo_file=os.path.join(f"{self.candidate_path}/geofile_full.conical.Pythia8-TGeant4.root")
-				self.load_geofile()
-				#print(f"File read successfully.\n")
-		    
-		except Exception as e:
-		        print(e)
-
-
-		print_file=False    
+		self.candidate_tree = f_candidate.cbmsim
+			
+		print("\n\n------------------------------------------------------------------------------------------------------------------------\n\n")
 		
-		f_embg=ROOT.TFile.Open(self.embg_file,"read")			    
+		timeblockreference=self.random.Uniform(0+500, (10**9)-(500)) #reference time in the spill to set the timeframe
 		
-		embg_tree=f_embg.cbmsim
+		self.timeframe=[timeblockreference-500,timeblockreference+500] #timeframe of 1/millionth of a spill
 		
-		embg_entries=embg_tree.GetEntries()
-
-		nEvents_looped=0
+		self.assign_event_time_bg()
 		
-		while nEvents_looped < candidate_entries:
-			
-			if options.testing_code and nEvents_looped>500: 
-				break
-			
-			candidate_tree.GetEntry(nEvents_looped)
-			
-			candidate_t0=candidate_tree.ShipEventHeader.GetEventTime()
-
-			if not len(candidate_tree.Particles): 
-				nEvents_looped+=1
-				continue
-			
-			print(f"\nEvent {nEvents_looped}, {len(candidate_tree.Particles)} candidate(s) in event, {len(candidate_tree.Digi_SBTHits)} Digihits in the candidate event ")
-			
-			retry=True
-			
-			while retry:
-				
-				embg_index = random.randint(0,embg_entries - 1)
-
-				embg_tree.GetEntry(embg_index)
-
-				combined_Digi_SBTHits=self.digitizeSBT(embg_tree.vetoPoint,candidate_tree.vetoPoint,candidate_t0,candidate_tree)
-
-				if combined_Digi_SBTHits: 
-					print(f" Combining MuBack Event:{embg_index}...\n \t\t\t{len(combined_Digi_SBTHits)} Digihits in the combined event now")
-					retry=False #only consider events with combined SBT activity
-				
-			self.process_event(candidate_tree,embg_tree,combined_Digi_SBTHits)
-
-			nEvents_looped+=1
-
+		nevents_to_check = min(options.nEvents,self.candidate_tree.GetEntries()-options.startEvent)
 		
-		filenumber=filenumber=f"{self.tag}{options.jobDir}_MuBack{self.MuBack_jobDir.split('_')[-1]}"
-		self.rootfilename=self.make_outputfile(filenumber)
-			
+		print(f"nevents_to_check: {nevents_to_check}")
+		
+		self.assign_event_time_candidate(nevents_to_check)
+		
+		self.combine_events(options.startEvent)
+
+
+		if self.print_file:
+			subtag = f"batch_{options.startEvent//options.nEvents}"
+			filenumber=f"{self.tag}_{options.jobDir}_{subtag}_MuBack"
+			self.rootfilename=self.make_outputfile(filenumber)
+
+		print("------------------------------------------------------------------------------------------------------------------------")
+
 	def inspect_outputfile(self):
 
 	    inputmatrixlist,truthlist=[],[]
-	        
-	    #for datafile in os.listdir(self.output_dir):
-
-	        #if not datafile.startswith("datafile_signal"): continue
-	        #if not datafile.endswith(".root"): continue
 	                    
-	    tree = uproot.open(self.output_dir+self.rootfilename)["tree"]
+	    tree = uproot.open(self.rootfilename)["tree"]
 	    data = tree.arrays(['inputmatrix', 'truth'], library='np')
 	    
 	    inputmatrix     = data['inputmatrix']
@@ -531,8 +587,9 @@ class EventDataProcessor:
 	    print(f"\tDaughter1_mom\t{signal_details[8]}")
 	    print(f"\tDaughter2_mom\t{signal_details[9]}")
 
-#-----------------------------------------------------------------------------
-processor = EventDataProcessor(input_path=embg_path , candidate_path= candidatefile_path, output_dir="./",tag=tag)
 
-processor.process_file()
-processor.inspect_outputfile()
+# Initialize and run the analysis
+abc = Candidate_MuBack_dataformatter(candidatefile_path,options.embg_path,tag)
+abc.run_analysis()
+abc.inspect_outputfile()
+#ut.writeHists(h,"plots_datafile.root")
